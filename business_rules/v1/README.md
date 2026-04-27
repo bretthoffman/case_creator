@@ -1,155 +1,167 @@
-# Case Creator Rules Editing Guide
+# Case Creator Unified Rules Guide
 
-This folder contains the main business rules file for Case Creator.
+This folder contains the canonical unified rules file used by Case Creator.
 
-## The file you edit
+## The one file to edit
 
-Edit this file:
-
-`business_rules/v1/case_creator_rules.yaml`
-
-Do **not** edit the packaged seed file by hand.
-
----
-
-## How to make changes with ChatGPT
-
-### Step 1 — Open the prompt file
-
-Open:
-
-`business_rules/v1/CASE_CREATOR_RULES_EDIT_PROMPT.md`
-
-Copy the **entire contents** of that file.
-
----
-
-### Step 2 — Add your requested change
-
-At the very bottom of the prompt file, there is a line that says:
-
-`NEW CHANGES I WANT TO MAKE:`
-
-Describe what your requested change is after that line.
-
-Examples:
-- Turn contact model mode on
-- Add A3.5 to the non-Argen shade markers
-- Add a doctor rule so Dr Jane Doe always goes to ai_envision
-- Route the AI family to argen
-
----
-
-### Step 3 — Paste the full YAML file after the prompt
-
-Open:
+Edit this file in the repo:
 
 `business_rules/v1/case_creator_rules.yaml`
 
-Copy the **entire contents** of that YAML file.
+After any change, **save** and **restart** the app.
 
-Then paste that full YAML file **underneath** the prompt in the ChatGPT message.
+## Packaged installs vs repo files
 
-So the message you send should contain:
-
-1. the full prompt file  
-2. your requested change added after `NEW CHANGES I WANT TO MAKE:`  
-3. the full current YAML file pasted below it  
-
----
-
-### Step 4 — Let ChatGPT respond
-
-If your request is clear, ChatGPT should return:
-
-- the **full updated YAML file**
-- in **one code block**
-- with **no extra explanation**
-
-If your request is not clear enough, it should ask you a short follow-up question first.
-
-Answer the question, then let it generate the full updated YAML.
+- Repo/source-dev uses `business_rules/v1/case_creator_rules.yaml`.
+- Packaged Windows installs seed and then use:
+  - `%LOCALAPPDATA%\CaseCreator\business_rules\v1\case_creator_rules.yaml`
+- `business_rules_seed/v1/case_creator_rules.yaml` is a bundled seed copy, not a second operator file.
 
 ---
 
-### Step 5 — Replace the YAML file
+## Destination vs label (important)
 
-Copy the **entire YAML code block** from ChatGPT’s response.
+Case Creator separates:
 
-Paste it back into:
+1. **`destination_key`** (actual routing target)
+   - `argen`
+   - `"1_9"`
 
-`business_rules/v1/case_creator_rules.yaml`
+2. **`route_label_override_key`** (display/readback label)
+   - `argen`
+   - `designer`
+   - `serbia`
+   - `ai_designer`
+   - `ai_serbia`
 
-Replace the whole file.
-
-Save it.
-
----
-
-### Step 6 — Restart the app
-
-After saving the file:
-
-**RESTART THE APP**
-
-Changes do not take effect until the app is restarted.
+When you want “show **Send to Serbia** but still route to **1.9**”, use a bounded
+**label override** (`route_label_override_key`), not a destination path change.
 
 ---
 
-## Important rules
+## What can be changed in `case_creator_rules.yaml`
 
-- Always paste the **entire** prompt file first
-- Always paste the **entire** current YAML file after the prompt
-- Always replace the **entire** YAML file with the response
-- Do not hand-edit random parts unless you understand the format
-- Do not invent new keys or sections yourself
-- Do not remove header comments from the YAML file
+## 1) doctor_overrides
 
----
+Use doctor rules to choose template keys and/or bounded label override keys.
 
-## What kinds of changes can be made
+- **Simple doctor rules**
+  - match doctor text (`contains_any`, `contains_all`) and set:
+    - `action.template_override_key`
+    - optional `action.route_label_override_key`
 
-This YAML file supports changes such as:
+- **Richer Abby/VD-style rules**
+  - predicate + `when` + `outcomes[]` for conditional template key selection.
+  - keep to supported fields already in the schema.
 
-- doctor override rules
-- advanced doctor outcome rules
-- non-Argen shade markers
-- routing overrides
-- Argen contact-model mode on/off
+## 2) shade_overrides
 
-Examples of possible requests:
+- Edit `non_argen_shade_markers` list.
+- Keep marker values simple shade code strings.
 
-- “Turn contact model mode on.”
-- “Add A3.5 to the non-Argen shade markers.”
-- “Route the AI family to argen.”
-- “Add a simple doctor rule so Dr Smith always uses ai_envision.”
+## 3) routing_overrides
 
----
+- Edit `template_family_route_overrides` list to map family -> destination key.
+- Allowed family keys: `argen`, `study`, `anterior`, `ai`
+- Allowed destination keys: `argen`, `"1_9"`
 
-## If something goes wrong
+## 4) argen_modes
 
-If ChatGPT returns something that:
-
-- looks incomplete
-- removes large sections
-- changes unrelated rules
-- invents new fields
-- does not return the full YAML file
-
-do **not** save it yet.
-
-Instead, try again with a clearer request.
+- Set `contact_model_mode` to `"off"` or `"on"`.
 
 ---
 
-## Final reminder
+## What should NOT be changed here
 
-The normal workflow is:
+Do not try to encode these in YAML:
 
-1. Copy the prompt file
-2. Add your requested change at the end
-3. Paste the full current YAML file below it
-4. Send to ChatGPT
-5. Copy the full YAML response back into `case_creator_rules.yaml`
-6. Save
-7. Restart the app
+- raw filesystem paths
+- scanner heuristics
+- unsupported material/manual-review engine internals
+- template engine internals outside approved rule fields
+
+If the schema rejects a field, it is not supported.
+
+---
+
+## Practical examples
+
+### Example A — Add a simple doctor rule
+
+```yaml
+doctor_overrides:
+  version: 1
+  enabled: true
+  rules:
+    - id: dr_smith_simple
+      enabled: true
+      match:
+        contains_all: ["smith", "dental"]
+      action:
+        template_override_key: ai_envision
+```
+
+### Example B — Show Serbia readback while destination remains 1.9
+
+```yaml
+doctor_overrides:
+  version: 1
+  enabled: true
+  rules:
+    - id: dr_casey_serbia_readback
+      enabled: true
+      match:
+        contains_all: ["casey", "clinic"]
+      action:
+        route_label_override_key: serbia
+```
+
+This changes label/readback behavior only. Destination mapping still comes from template family routing.
+
+### Example C — Turn contact model mode on
+
+```yaml
+argen_modes:
+  version: 1
+  enabled: true
+  contact_model_mode: "on"
+```
+
+### Example D — Add a non-Argen shade marker
+
+```yaml
+shade_overrides:
+  version: 1
+  enabled: true
+  non_argen_shade_markers:
+    - C3
+    - A4
+    - A3.5
+  rules: []
+```
+
+### Example E — Change routing for AI family
+
+```yaml
+routing_overrides:
+  version: 1
+  enabled: true
+  template_family_route_overrides:
+    - family_key: argen
+      destination_key: argen
+    - family_key: study
+      destination_key: "1_9"
+    - family_key: anterior
+      destination_key: "1_9"
+    - family_key: ai
+      destination_key: "1_9"
+```
+
+---
+
+## Quick safety checklist
+
+1. Edit only `case_creator_rules.yaml`.
+2. Keep keys bounded; do not invent fields.
+3. Validate logically (destination vs label intent).
+4. Save and restart.

@@ -43,9 +43,14 @@ if errorlevel 1 (
   exit /b 1
 )
 
-REM Prefer py launcher when available.
-where py >nul 2>nul
-if %errorlevel%==0 (
+REM Prefer py launcher when available (local dev). On GitHub Actions, use PATH python
+REM so the same interpreter that ran pip install -r requirements.txt runs PyInstaller.
+set "USE_PY_LAUNCHER="
+if not defined GITHUB_ACTIONS (
+  where py >nul 2>nul
+  if not errorlevel 1 set "USE_PY_LAUNCHER=1"
+)
+if defined USE_PY_LAUNCHER (
   py -m PyInstaller ^
     --noconfirm ^
     --onedir ^

@@ -113,6 +113,48 @@ class TestUnifiedBusinessRulesConfig(unittest.TestCase):
         self.assertFalse(result.valid)
         self.assertTrue(any("argen_modes:" in e for e in result.errors))
 
+    def test_doctor_route_label_override_key_allowed(self) -> None:
+        doc = {
+            "unified_version": 1,
+            "doctor_overrides": {
+                "version": 1,
+                "enabled": True,
+                "rules": [
+                    {
+                        "id": "label_override_ok",
+                        "enabled": True,
+                        "match": {"contains_all": ["brier", "creek"]},
+                        "action": {"route_label_override_key": "serbia"},
+                    }
+                ],
+            },
+        }
+        result = schemas.validate_unified_business_rules_config(doc)
+        self.assertTrue(result.valid, result.errors)
+
+    def test_doctor_route_label_override_key_rejects_unknown(self) -> None:
+        doc = {
+            "unified_version": 1,
+            "doctor_overrides": {
+                "version": 1,
+                "enabled": True,
+                "rules": [
+                    {
+                        "id": "label_override_bad",
+                        "enabled": True,
+                        "match": {"contains_all": ["brier", "creek"]},
+                        "action": {"route_label_override_key": "serbia_path"},
+                    }
+                ],
+            },
+        }
+        result = schemas.validate_unified_business_rules_config(doc)
+        self.assertFalse(result.valid)
+        self.assertTrue(
+            any("route_label_override_key must be a known route label key" in e for e in result.errors),
+            result.errors,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

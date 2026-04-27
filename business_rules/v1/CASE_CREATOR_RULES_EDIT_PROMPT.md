@@ -66,6 +66,7 @@ This YAML file is the single editable business-rules surface for Case Creator.
 
 It controls only approved business-rule behavior such as:
 - doctor-based template rules
+- doctor-based route label/readback rules
 - shade override markers
 - routing overrides
 - Argen contact-model mode
@@ -141,6 +142,8 @@ GENERAL YAML EDITING RULES
    - "off"
 5. Keep list ordering stable unless the user asks for reordering or order is needed for precedence.
 6. Rule order matters in some sections. Do not casually reorder rules.
+7. Do not remove fields just because they are advanced or currently disabled.
+8. If the file already contains advanced rules, preserve their structure unless the user explicitly asks to change them.
 
 ================================================================================
 SHADE AND MATERIAL NORMALIZATION REFERENCE
@@ -152,7 +155,7 @@ You must understand and normalize common user wording before editing the YAML.
 A. SHADE CONVERSION REFERENCE
 --------------------------------------------------------------------------------
 
-If the user refers to a 3D Master / bleach-style shade, understand its Case Creator equivalent.
+If the user refers to a 3D Master or bleach-style shade, understand its Case Creator equivalent.
 
 Use this conversion map:
 
@@ -188,7 +191,7 @@ Use this conversion map:
 - 5m2 -> A4
 - 5m3 -> A4
 
-Important interpretation rule:
+Important interpretation rules:
 - If the user says something like "all shades of 3m2" or "treat 3M2 like a special shade", understand that 3m2 corresponds to A3.
 - If the user names a shade that is not already in the YAML but is present in this conversion table, interpret it by its converted value before deciding what change to make.
 - Preserve the user's meaning, but edit the YAML in the format that makes sense for the current schema.
@@ -230,11 +233,51 @@ Examples:
   -> treat "multi layer" as Envision-side logic
 
 ================================================================================
+DESTINATION VS LABEL REFERENCE
+================================================================================
+
+You must understand the difference between ACTUAL DESTINATION and DISPLAY LABEL / READBACK.
+
+1. destination_key
+   This is the real logical destination.
+   Supported values in the current editable surface are:
+   - argen
+   - "1_9"
+
+2. route_label_override_key
+   This is a UI/log/readback label.
+   It does NOT necessarily change the real destination.
+
+Important:
+- "Send to Serbia" in Case Creator usually means the readback label says Serbia while the actual destination may still be "1_9".
+- Do NOT assume "Serbia" is a real filesystem path or destination key.
+- If the user asks to "send to Serbia", you must decide whether they mean:
+  A. change the actual destination
+  B. change only the route/readback label
+  C. both
+- If that is ambiguous, ask a clarifying question.
+
+Supported route label override keys:
+- argen
+- designer
+- serbia
+- ai_designer
+- ai_serbia
+
+Do not invent new route label values.
+
+Examples:
+- "Show Send to Serbia but still route to 1.9"
+  -> keep destination at "1_9" and use route_label_override_key: serbia where the schema supports it
+- "Actually send the AI family to argen"
+  -> this is a destination change, not just a label change
+
+================================================================================
 SECTION: doctor_overrides
 ================================================================================
 
 Purpose:
-Controls doctor-name-based template override rules.
+Controls doctor-name-based template override rules and bounded doctor-based route label/readback override rules.
 
 Shape:
 
@@ -268,9 +311,9 @@ There are two kinds of doctor rules:
    These use:
    - match
    - optional when
-   - action.template_override_key
+   - action.template_override_key and/or action.route_label_override_key where supported by the current file schema
 
-   Use these when one doctor should always go to one template.
+   Use these when one doctor should always go to one template or always use one supported readback label.
 
 2. RICHER MULTI-OUTCOME RULES
    These use:
@@ -284,6 +327,27 @@ Important:
 - richer outcomes rules are intended for advanced controlled behavior
 - do not casually rewrite existing Abby or VD rules unless the user explicitly asks
 - keep their condition structure intact unless the requested change truly requires it
+- if the file already contains advanced multi-outcome rules, new multi-outcome rules may be added in the same style when the user explicitly asks for them
+
+--------------------------------------------------------------------------------
+doctor_overrides rule ids and new rules
+--------------------------------------------------------------------------------
+
+A doctor rule may be newly created if the user asks for one.
+
+Important:
+- The `id` field is just a unique label for the rule.
+- New rule ids may be created as needed.
+- A new doctor rule does NOT require separate registration anywhere else in the app.
+- If a new rule uses supported schema fields and is placed under `doctor_overrides.rules`, the app can read and apply it.
+- Keep each `id` unique within the file.
+- Prefer short, descriptive snake_case ids such as:
+  - jane_doe_simple
+  - bill_stanza_multi_outcome
+  - shade_b3_serbia_label
+
+Use a SIMPLE rule when one doctor or one straightforward case grouping should always go to one template or one supported readback label.
+Use a RICHER MULTI-OUTCOME rule only when the behavior truly depends on material, scanner, shade, or similar supported fields.
 
 --------------------------------------------------------------------------------
 doctor_overrides.match
@@ -358,8 +422,9 @@ when:
 doctor_overrides.action
 --------------------------------------------------------------------------------
 
-Allowed action key for safe use:
+Allowed action keys for safe use:
 - template_override_key
+- route_label_override_key, but only when the current file schema already supports it in that rule shape and the requested meaning is clearly label/readback behavior rather than real destination routing
 
 Do not invent raw template paths.
 Use only supported template keys.
@@ -383,6 +448,14 @@ Allowed template_override_key values:
 - reg_envision_anterior
 - reg_envision_study
 
+Allowed route_label_override_key values:
+
+- argen
+- designer
+- serbia
+- ai_designer
+- ai_serbia
+
 Rule precedence:
 - doctor rules are checked top to bottom
 - first enabled matching rule wins
@@ -391,6 +464,11 @@ Rule precedence:
 Special note:
 Existing Abby Dew and VD Brier Creek rules may already be present as richer multi-outcome rules.
 These are advanced rules. Do not simplify or flatten them unless the user explicitly asks and it can be done safely.
+
+If the user asks for Serbia-style behavior:
+- do not assume that means a destination change
+- use route_label_override_key when they mean the readback label
+- ask a clarifying question if they might mean the actual destination instead
 
 ================================================================================
 SECTION: shade_overrides
@@ -416,9 +494,10 @@ Use simple shade code strings like:
 - C3
 - A4
 - A3.5
+- B3
 
 Important:
-- if the user asks to add a shade written in a convertible form like 3m2, 4m2, bl2, etc., understand the conversion table above first
+- if the user asks to add a shade written in a convertible form like 3m2, 3m3, 4m2, bl2, etc., understand the conversion table above first
 - then make the safest YAML edit based on the current file schema and user intent
 
 Do not invent complicated structures here unless already present in the file.
@@ -459,10 +538,19 @@ Allowed destination_key values:
 Do not invent other destination values like raw folder paths.
 Do not invent filesystem locations.
 
-This section changes logical routing targets only.
+This section changes actual logical routing targets only.
 
-If the user asks to route something to Serbia specifically, do NOT invent a destination key unless it already exists in the YAML and is supported.
-Ask a clarifying question if needed.
+Important:
+- This section is for destination routing, not display label/readback behavior.
+- If the user asks to "send to Serbia" but means the on-screen label, this section is probably NOT the right section.
+- If the user wants actual routing family changes, use this section.
+- If the user wants Serbia-style readback while keeping destination at 1_9, that is a label/readback request, not a routing_overrides destination change.
+
+Examples:
+- "Route the AI family to argen"
+  -> routing_overrides change
+- "Show Send to Serbia but still route to 1.9"
+  -> likely doctor rule with route_label_override_key, not routing_overrides
 
 ================================================================================
 SECTION: argen_modes
@@ -522,13 +610,14 @@ When the user asks for a change, follow this process:
 
 1. Read the full current YAML carefully.
 2. Normalize user wording using the shade/material guidance above.
-3. Identify which existing section(s) must change.
-4. Make only the requested changes.
-5. Preserve everything else.
-6. Keep the file valid YAML.
-7. Keep the header at the top exactly.
-8. If the request is ambiguous, ask concise follow-up questions and stop.
-9. If the request is clear, return ONLY the full updated YAML file in one fenced code block.
+3. Distinguish between destination changes and route/readback label changes.
+4. Identify which existing section(s) must change.
+5. Make only the requested changes.
+6. Preserve everything else.
+7. Keep the file valid YAML.
+8. Keep the header at the top exactly.
+9. If the request is ambiguous, ask concise follow-up questions and stop.
+10. If the request is clear, return ONLY the full updated YAML file in one fenced code block.
 
 ================================================================================
 EXAMPLES OF SAFE REQUESTS
@@ -579,6 +668,23 @@ That means changing or adding a routing row under:
 with:
 - family_key: ai
 - destination_key: argen
+
+Example 7:
+"Show Send to Serbia for cases matching this rule, but still route them to 1.9."
+
+That means:
+- keep destination logic unchanged unless separately asked
+- use a bounded route_label_override_key: serbia where supported
+- do not invent a Serbia destination path
+
+Example 8:
+"Add a new multi-outcome doctor rule for Bill Stanza."
+
+That means:
+- create a new unique id such as bill_stanza_multi_outcome
+- place it under doctor_overrides.rules
+- use only supported match / when / outcomes / action fields
+- do not assume the app needs separate registration for the new rule id
 
 ================================================================================
 OUTPUT REQUIREMENT

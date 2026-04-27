@@ -53,6 +53,7 @@ DoctorPolicySource = Optional[Literal["outcomes", "simple"]]
 
 class DoctorPolicyResult(NamedTuple):
     template_key: Optional[str]
+    route_label_key: Optional[str]
     source: DoctorPolicySource
 
 
@@ -67,7 +68,7 @@ def resolve_doctor_policy(
     a multi-outcome rule or a simple action rule.
     """
     if not doctor_cfg.get("enabled", True):
-        return DoctorPolicyResult(None, None)
+        return DoctorPolicyResult(None, None, None)
 
     doctor_name = (case_data or {}).get("doctor", "")
     rules: List[Dict[str, Any]] = doctor_cfg.get("rules") or []
@@ -91,7 +92,7 @@ def resolve_doctor_policy(
                 act = outcome.get("action") or {}
                 tk = act.get("template_override_key")
                 if isinstance(tk, str) and tk.strip():
-                    return DoctorPolicyResult(tk.strip(), "outcomes")
+                    return DoctorPolicyResult(tk.strip(), None, "outcomes")
             continue
 
         rw = rule.get("when")
@@ -99,10 +100,14 @@ def resolve_doctor_policy(
             continue
         act = rule.get("action") or {}
         tk = act.get("template_override_key")
+        rk = act.get("route_label_override_key")
         if isinstance(tk, str) and tk.strip():
-            return DoctorPolicyResult(tk.strip(), "simple")
+            route_label_key = rk.strip() if isinstance(rk, str) and rk.strip() else None
+            return DoctorPolicyResult(tk.strip(), route_label_key, "simple")
+        if isinstance(rk, str) and rk.strip():
+            return DoctorPolicyResult(None, rk.strip(), "simple")
 
-    return DoctorPolicyResult(None, None)
+    return DoctorPolicyResult(None, None, None)
 
 
 def resolve_doctor_policy_template_key(
@@ -119,3 +124,18 @@ def resolve_doctor_policy_template_key(
     Live runtime passes allow_outcomes=False unless CASE_CREATOR_DOCTOR_OUTCOMES_LIVE is enabled.
     """
     return resolve_doctor_policy(case_data, doctor_cfg, allow_outcomes=allow_outcomes).template_key
+
+
+def resolve_doctor_policy_route_label_key(
+    case_data: Dict[str, Any],
+    doctor_cfg: Dict[str, Any],
+    *,
+    allow_outcomes: bool = True,
+) -> Optional[str]:
+    """
+    Returns a bounded route-label key (e.g. serbia, ai_designer) if a rule matches, else None.
+
+    This only reads the validated ``route_label_override_key`` value from simple doctor actions.
+    Outcomes remain template-only by schema in this phase.
+    """
+    return resolve_doctor_policy(case_data, doctor_cfg, allow_outcomes=allow_outcomes).route_label_key

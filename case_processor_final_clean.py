@@ -480,7 +480,11 @@ def process_case(case_number, folder_path, log_callback=print):
         if naming_decision.suffix:
             case_id = naming_decision.final_case_id
             case_data["case_id"] = case_id
-        destination_decision = select_destination(template_filename, case_data.get("doctor", ""))
+        destination_decision = select_destination(
+            template_filename,
+            case_data.get("doctor", ""),
+            case_data=case_data,
+        )
         if destination_decision.destination_key == routing_rules.DEST_ARGEN:
             target_root = SEND_TO_ARGEN_PATH
         elif destination_decision.destination_key == routing_rules.DEST_1_9:
