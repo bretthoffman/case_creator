@@ -42,11 +42,15 @@ jobs:
 
       - name: Verify pip pathlib package is absent
         run: |
-          python -m pip show pathlib 2>$null
-          if ($LASTEXITCODE -eq 0) {
+          # pip exits 1 when the distribution is missing; GitHub Actions would otherwise
+          # treat that native exit code as step failure unless we end with exit 0.
+          python -m pip show pathlib 2>$null | Out-Null
+          $pipExit = $LASTEXITCODE
+          if ($pipExit -eq 0) {
             throw "pip package 'pathlib' is still installed; PyInstaller will fail. Remove it from requirements or dependencies."
           }
-          Write-Host "OK: pip does not report a 'pathlib' distribution."
+          Write-Host "OK: pip does not report a 'pathlib' distribution (pip show exit code $pipExit)."
+          exit 0
 
       - name: Package app (PyInstaller one-folder)
         shell: cmd
