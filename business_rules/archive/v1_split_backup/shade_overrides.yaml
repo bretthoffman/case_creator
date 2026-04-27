@@ -1,0 +1,20 @@
+# SAVE FILE AND RESTART APP AFTER EDITING FOR THE CHANGES TO TAKE EFFECT
+
+# This file controls only the non-Argen shade marker list in this phase.
+# Format: YAML object with version/enabled/non_argen_shade_markers/rules.
+# Live in this phase:
+# - non_argen_shade_markers (list of shade code substrings; matched case-insensitively inside shade text)
+# Not live in this phase:
+# - rules[] (reserved; no effect on runtime yet)
+# Keep marker values as simple shade code strings.
+# Do not add template paths or route keys here.
+
+# Baseline seeded to match code default domain/rules/template_rules.py NON_ARGEN_SHADE_MARKERS ("C3", "A4").
+# If this list is empty or invalid at runtime, the same tuple is used as fallback.
+
+version: 1
+enabled: true
+non_argen_shade_markers:
+  - C3
+  - A4
+rules: []

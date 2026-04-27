@@ -1,0 +1,19 @@
+{
+  "UI_COLOR_MODE": "color",
+  "EVIDENT_PATH": "",
+  "TRIOS_SCAN_ROOT": "",
+  "CC_IMPORTED_ROOT": "",
+  "UI_THEME": "Arctic Ice",
+  "UI_LOGO": "Coffee",
+  "UI_DISPLAY_TITLE": "WeeWoo",
+  "UI_DISPLAY_SUBTITLE": "<3",
+  "UI_YEAR_OPTIONS": [
+    "2022",
+    "2023",
+    "2024",
+    "2025",
+    "2026",
+    "2027"
+  ],
+  "UI_DEFAULT_YEAR": "2026"
+}

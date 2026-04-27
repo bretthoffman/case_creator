@@ -1,0 +1,26 @@
+# SAVE FILE AND RESTART APP AFTER EDITING FOR THE CHANGES TO TAKE EFFECT
+
+# This file controls template-family -> destination-key routing overrides.
+# Format: YAML object with version/enabled/template_family_route_overrides.
+# Each entry:
+# - family_key: one of [argen, ai, study, anterior]
+# - destination_key: argen OR "1_9" (quote 1_9 so YAML keeps string form)
+# This does NOT accept filesystem paths.
+# Route labels (designer/serbia/argen) are NOT overridden here in this phase.
+# First matching family_key in the list wins for that template family.
+
+# Baseline below mirrors infrastructure/config/routing_override_runtime.py BASELINE_FAMILY_DESTINATION_MAP
+# (argen -> argen; study, anterior, ai -> 1_9). Explicit seeding documents the live default; behavior matches
+# an empty override list before this pass.
+
+version: 1
+enabled: true
+template_family_route_overrides:
+  - family_key: argen
+    destination_key: argen
+  - family_key: study
+    destination_key: "1_9"
+  - family_key: anterior
+    destination_key: "1_9"
+  - family_key: ai
+    destination_key: "1_9"

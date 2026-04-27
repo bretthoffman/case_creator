@@ -1,0 +1,195 @@
+# SAVE FILE AND RESTART APP AFTER EDITING FOR THE CHANGES TO TAKE EFFECT
+#
+# Doctor-name-based template overrides (validated YAML; see business_rule_schemas).
+#
+# --- Two kinds of rules ---
+#
+# 1) SIMPLE rules — match + optional when + single action.template_override_key
+#    These always apply when matched (if enabled). Use for “this doctor always gets this template.”
+#
+# 2) RICHER rules — match + when + outcomes[] (multiple conditional template keys)
+#    These mirror the material / scanner / shade / modeless gating that template_utils already
+#    encodes for Abby Dew and VD Brier Creek. They are **staged for pilot use** and are **NOT**
+#    evaluated in production unless you explicitly enable the feature flag (see below).
+#
+# --- Feature flag for outcomes[] (default OFF) ---
+#
+# Multi-outcome rules (outcomes[]) are ignored at runtime unless:
+#   CASE_CREATOR_DOCTOR_OUTCOMES_LIVE=1   (or true / yes / on)
+# See config.doctor_outcomes_live_enabled() and infrastructure/config/doctor_override_runtime.py.
+#
+# With the flag OFF (default): inline Abby/VD logic in template_utils.select_template is unchanged
+# and these outcomes do not change which template is selected.
+#
+# With the flag ON: first matching outcome can override the folder chosen by select_template.
+# Observability: domain/decisions/template_selector logs when an outcomes rule actually changes
+# the template vs baseline (see prior pass).
+#
+# --- Do not casually edit richer rules ---
+#
+# Conditions use the same bounded DSL as doctor_when_eval (fields, material_is_adz,
+# scanner_is_itero, non_argen_shade, excludes_modeless_hint_route). Wrong edits can mis-route
+# cases. Prefer parity harness tests/fixtures/doctor_policy_abby_vd_offline.yaml for experiments,
+# then copy reviewed changes here.
+#
+# --- Label / Serbia routing ---
+#
+# This file does not control route labels or Serbia naming; only template_override_key on cases.
+#
+# Allowed template_override_key values include:
+#   argen_envision, argen_adzir, argen_modeless_adzir, argen_modeless_envision,
+#   ai_envision, ai_envision_model, ai_adzir, ai_adzir_model,
+#   itero_adzir_anterior, itero_adzir_study, itero_envision_anterior, itero_envision_study,
+#   reg_adzir_anterior, reg_adzir_study, reg_envision_anterior, reg_envision_study
+# Matching rule order is top-to-bottom; first enabled matching rule wins.
+# Do not add raw template paths or filesystem paths.
+
+# --- Code-owned Abby/VD template branches (still in template_utils) ---
+# template_utils.select_template still contains the authoritative if/elif logic for Abby Dew and
+# VD Brier Creek. This YAML does not remove or replace that code; it optionally mirrors it for
+# flagged outcomes-live trials. Predicate names: abby_dew, vd_brier_creek (see doctor_rules.py).
+
+version: 1
+enabled: true
+rules:
+  # Abby Dew — multi-outcome (FLAG-GATED: only when CASE_CREATOR_DOCTOR_OUTCOMES_LIVE is set).
+  # Applies only when: no study, no signature, not anterior, and not on the modeless Argen fast path
+  # (excludes_modeless_hint_route). Then picks ai_* templates from material, scanner, shade_usable,
+  # and non-Argen shade markers — aligned with parity harness / offline fixture.
+  - id: abby_dew_multi_outcome
+    enabled: true
+    match:
+      predicate: abby_dew
+    when:
+      all:
+        - { field: has_study, eq: false }
+        - { field: signature, eq: false }
+        - { field: is_anterior, eq: false }
+        - { excludes_modeless_hint_route: true }
+    outcomes:
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: false }
+            - { scanner_is_itero: true }
+        action:
+          template_override_key: ai_adzir
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: false }
+            - { scanner_is_itero: true }
+        action:
+          template_override_key: ai_envision
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: false }
+            - { scanner_is_itero: false }
+        action:
+          template_override_key: ai_adzir_model
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: false }
+            - { scanner_is_itero: false }
+        action:
+          template_override_key: ai_envision_model
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: false }
+        action:
+          template_override_key: ai_adzir
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: false }
+        action:
+          template_override_key: ai_envision
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: true }
+        action:
+          template_override_key: ai_adzir
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: true }
+        action:
+          template_override_key: ai_envision
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: false }
+            - { non_argen_shade: false }
+        action:
+          template_override_key: ai_adzir
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: false }
+            - { non_argen_shade: false }
+        action:
+          template_override_key: ai_envision
+
+  # VD Brier Creek — multi-outcome (FLAG-GATED same as Abby block above).
+  # Same top-level when; outcomes cover iTero vs non–iTero and non-Argen shade where applicable.
+  - id: vd_brier_creek_multi_outcome
+    enabled: true
+    match:
+      predicate: vd_brier_creek
+    when:
+      all:
+        - { field: has_study, eq: false }
+        - { field: signature, eq: false }
+        - { field: is_anterior, eq: false }
+        - { excludes_modeless_hint_route: true }
+    outcomes:
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: true }
+        action:
+          template_override_key: ai_adzir
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: true }
+        action:
+          template_override_key: ai_envision
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { scanner_is_itero: false }
+        action:
+          template_override_key: ai_adzir_model
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { scanner_is_itero: false }
+        action:
+          template_override_key: ai_envision_model
+
+  # Example simple override (disabled). Enable only if one template key is correct for every case.
+  - id: example_single_key_doctor
+    enabled: false
+    match:
+      contains_all: ["sample", "doctor"]
+    action:
+      template_override_key: ai_envision

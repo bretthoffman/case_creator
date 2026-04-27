@@ -1,0 +1,134 @@
+# Offline parity harness fixture — same rule shapes as production doctor_overrides under
+# business_rules/v1/case_creator_rules.yaml (Abby/VD multi-outcome blocks). For experiments only.
+
+version: 1
+enabled: true
+rules:
+  - id: offline_abby_dew_slice
+    enabled: true
+    match:
+      predicate: abby_dew
+    when:
+      all:
+        - { field: has_study, eq: false }
+        - { field: signature, eq: false }
+        - { field: is_anterior, eq: false }
+        - { excludes_modeless_hint_route: true }
+    outcomes:
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: false }
+            - { scanner_is_itero: true }
+        action:
+          template_override_key: ai_adzir
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: false }
+            - { scanner_is_itero: true }
+        action:
+          template_override_key: ai_envision
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: false }
+            - { scanner_is_itero: false }
+        action:
+          template_override_key: ai_adzir_model
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: false }
+            - { scanner_is_itero: false }
+        action:
+          template_override_key: ai_envision_model
+      # iTero + Argen-usable shade (A1): matches template_utils before non-Argen shade branches.
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: false }
+        action:
+          template_override_key: ai_adzir
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: false }
+        action:
+          template_override_key: ai_envision
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: true }
+        action:
+          template_override_key: ai_adzir
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: true }
+        action:
+          template_override_key: ai_envision
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: false }
+            - { non_argen_shade: false }
+        action:
+          template_override_key: ai_adzir
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: false }
+            - { non_argen_shade: false }
+        action:
+          template_override_key: ai_envision
+
+  - id: offline_vd_brier_creek_slice
+    enabled: true
+    match:
+      predicate: vd_brier_creek
+    when:
+      all:
+        - { field: has_study, eq: false }
+        - { field: signature, eq: false }
+        - { field: is_anterior, eq: false }
+        - { excludes_modeless_hint_route: true }
+    outcomes:
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: true }
+        action:
+          template_override_key: ai_adzir
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { field: shade_usable, eq: true }
+            - { scanner_is_itero: true }
+            - { non_argen_shade: true }
+        action:
+          template_override_key: ai_envision
+      - when:
+          all:
+            - { material_is_adz: true }
+            - { scanner_is_itero: false }
+        action:
+          template_override_key: ai_adzir_model
+      - when:
+          all:
+            - { material_is_adz: false }
+            - { scanner_is_itero: false }
+        action:
+          template_override_key: ai_envision_model

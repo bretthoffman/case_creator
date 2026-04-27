@@ -1,0 +1,22 @@
+# SAVE FILE AND RESTART APP AFTER EDITING FOR THE CHANGES TO TAKE EFFECT
+#
+# Argen contact-model templates (argen_modeless_adzir / argen_modeless_envision) on/off.
+# Format: YAML object with version/enabled/contact_model_mode.
+#
+# contact_model_mode:
+#   off — Legacy behavior: no forced contact-model templates. material_hint.route is used as-is
+#         in template selection (same practical behavior as the old legacy_default).
+#   on  — For valid Argen cases only (material_hint.route is argen_adzir, argen_envision, or modeless),
+#         and when the case is not a study case, template selection uses contact-model Argen templates
+#         directly: Adzir material → argen_modeless_adzir, otherwise → argen_modeless_envision.
+#         Non-Argen routes and existing manual-review / unsupported-material protections are unchanged.
+#
+# Deprecated values (legacy_default, always_with_contact_models, always_without_contact_models) are
+# still accepted when loading and are normalized to off or on with a validation warning — update this
+# file to off/on when convenient.
+#
+# Implementation note: switching is done in template_utils.select_template, not by rewriting hint routes.
+
+version: 1
+enabled: true
+contact_model_mode: "off"

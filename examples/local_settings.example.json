@@ -1,0 +1,23 @@
+{
+  "EVIDENT_PATH": "",
+  "EVOLUTION_DROP_PATH": "",
+  "TRIOS_SCAN_ROOT": "",
+  "SIGNATURE_DOCTORS_PATH": "",
+  "TEMPLATE_DIR": "",
+  "JOTFORM_PATH": "",
+  "CC_IMPORTED_ROOT": "",
+  "UI_THEME": "Default",
+  "UI_LOGO": "ADS",
+  "UI_COLOR_MODE": "color",
+  "UI_DISPLAY_TITLE": "",
+  "UI_DISPLAY_SUBTITLE": "",
+  "UI_YEAR_OPTIONS": [
+    "2022",
+    "2023",
+    "2024",
+    "2025",
+    "2026",
+    "2027"
+  ],
+  "UI_DEFAULT_YEAR": "2026"
+}

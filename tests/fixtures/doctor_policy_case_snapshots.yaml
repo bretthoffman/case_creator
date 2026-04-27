@@ -1,0 +1,62 @@
+# Representative case_data blobs for snapshot-style parity (optional harness group).
+# Each row is re-validated: select_template folder vs offline Abby/VD doctor policy fixture.
+# Keep this file small; expand the main harness for broad grids.
+
+version: 1
+snapshots:
+  - id: abby_adz_argen_shade_itero
+    mode: match
+    case:
+      doctor: "Abby Dew"
+      material: "adz multilayer"
+      has_study: false
+      signature: false
+      scanner: "itero"
+      shade_usable: true
+      is_ai: false
+      is_anterior: false
+      shade: "A1"
+      material_hint: { route: "argen_adzir", material: "adz" }
+
+  - id: vd_adz_non_argen_C3
+    mode: match
+    case:
+      doctor: "Jane Britt Brier Creek"
+      material: "adz multilayer"
+      has_study: false
+      signature: false
+      scanner: "itero"
+      shade_usable: true
+      is_ai: false
+      is_anterior: false
+      shade: "C3"
+      material_hint: { route: "argen_adzir", material: "adz" }
+
+  - id: abby_modeless_legacy_no_policy
+    mode: no_policy
+    case:
+      doctor: "Abby Dew"
+      material: "adz multilayer"
+      has_study: false
+      signature: false
+      scanner: "3shape"
+      shade_usable: true
+      is_ai: false
+      is_anterior: false
+      shade: "A1"
+      material_hint: { route: "modeless", material: "adz" }
+
+  - id: generic_doctor_abstention
+    mode: no_policy
+    notes: "Fixture predicates do not match; policy must not fire."
+    case:
+      doctor: "Generic Lakeside Dental"
+      material: "adz multilayer"
+      has_study: false
+      signature: false
+      scanner: "3shape"
+      shade_usable: true
+      is_ai: false
+      is_anterior: false
+      shade: "A1"
+      material_hint: { route: "argen_adzir", material: "adz" }
