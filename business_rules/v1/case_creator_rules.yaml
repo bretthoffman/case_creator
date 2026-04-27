@@ -1,34 +1,7 @@
 # =============================================================================
 # CASE CREATOR — BUSINESS RULES (single-file edit surface)
 # =============================================================================
-#
 # SAVE THIS FILE AND RESTART THE APP for changes to take effect.
-#
-# --- For humans ---
-# This file under business_rules/v1/ is the canonical human-edited unified rules file in the repo.
-# Source/dev runs load it directly. Do not edit business_rules_seed/v1/case_creator_rules.yaml by
-# hand — that path is the packaged default seed, kept identical by sync/build (see README in this folder).
-# Packaged apps seed %LOCALAPPDATA%/CaseCreator/business_rules/v1/case_creator_rules.yaml from the
-# bundled copy on first run; edit that external file after install (see README).
-# If this file is missing or invalid in dev, the app uses built-in schema defaults (not silent live rules).
-# An archival copy of the old per-family YAMLs lives under:
-#   business_rules/archive/v1_split_backup/
-# (read-only reference; not loaded at runtime).
-#
-# --- For ChatGPT / other LLMs ---
-# You may copy the ENTIRE file (including comments) into a chat when asking for edits.
-# The assistant should:
-#   1. Ask clarifying questions if the request is ambiguous or unsafe.
-#   2. Return the COMPLETE updated file in one fenced code block (full YAML), not a fragment.
-#   3. Preserve unrelated sections, keys, and comments unless the user asked to change them.
-#   4. NOT invent keys: only these top-level keys are allowed:
-#        unified_version (required, integer 1)
-#        enabled (optional boolean envelope metadata)
-#        doctor_overrides, shade_overrides, routing_overrides, argen_modes
-#   5. Keep each family subtree schema-valid (same rules as the old per-family YAML files).
-#   6. Prefer minimal formatting churn when possible.
-#
-# Schema reference: infrastructure/config/business_rule_schemas.py
 # =============================================================================
 
 unified_version: 1
