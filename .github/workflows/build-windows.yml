@@ -36,6 +36,18 @@ jobs:
           pip install -r requirements.txt
           pip install PySide6 pyinstaller
 
+      # PyInstaller rejects the PyPI 'pathlib' backport; remove if present (direct or transitive).
+      - name: Uninstall obsolete pip pathlib backport
+        run: python -m pip uninstall -y pathlib
+
+      - name: Verify pip pathlib package is absent
+        run: |
+          python -m pip show pathlib 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            throw "pip package 'pathlib' is still installed; PyInstaller will fail. Remove it from requirements or dependencies."
+          }
+          Write-Host "OK: pip does not report a 'pathlib' distribution."
+
       - name: Package app (PyInstaller one-folder)
         shell: cmd
         run: call scripts\windows\build_pyside6_onefolder.bat
