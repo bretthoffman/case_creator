@@ -1,6 +1,10 @@
 import html
+import json
 import os
+import subprocess
 import sys
+import tempfile
+import time
 from collections import deque
 
 from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
@@ -39,6 +43,13 @@ from config import (
 from import_service import build_case_id, get_app_info, import_case_by_id, validate_case_id
 from local_settings import save_settings_updates
 from local_settings import load_local_settings
+from update_check import (
+    STATUS_FAILURE,
+    STATUS_UP_TO_DATE,
+    STATUS_UPDATE_AVAILABLE,
+    UpdateCheckResult,
+    check_github_latest_release,
+)
 
 DEFAULT_YEAR_OPTIONS = ["2022", "2023", "2024", "2025", "2026", "2027"]
 DEFAULT_DEFAULT_YEAR = "2026"
@@ -195,6 +206,194 @@ LOGOS = {
 def get_live_rules_folder_path() -> str:
     local_appdata = os.getenv("LOCALAPPDATA") or os.path.expanduser("~")
     return os.path.join(local_appdata, "CaseCreator", "business_rules", "v1")
+
+
+def ensure_live_rules_folder_path_exists() -> str:
+    folder = get_live_rules_folder_path()
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+
+def get_install_root_path() -> str:
+    return os.path.join(os.path.expanduser("~"), "Documents", "CaseCreator")
+
+
+def _build_updater_powershell_script() -> str:
+    return r"""
+param(
+  [Parameter(Mandatory = $true)]
+  [string]$JobPath
+)
+
+$ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.Windows.Forms | Out-Null
+
+function Show-Message([string]$msg) {
+  [System.Windows.Forms.MessageBox]::Show($msg, "Case Creator Updater") | Out-Null
+}
+
+function Fail-And-Exit([string]$msg) {
+  Show-Message($msg)
+  exit 1
+}
+
+if (-not (Test-Path -LiteralPath $JobPath)) {
+  Fail-And-Exit "Update job file not found."
+}
+
+$job = Get-Content -LiteralPath $JobPath -Raw | ConvertFrom-Json
+$pidToWait = [int]$job.current_pid
+
+for ($i = 0; $i -lt 90; $i++) {
+  $proc = Get-Process -Id $pidToWait -ErrorAction SilentlyContinue
+  if (-not $proc) { break }
+  Start-Sleep -Milliseconds 500
+}
+
+$tempRoot = Join-Path $env:TEMP ("CaseCreatorUpdaterRun-" + [DateTimeOffset]::Now.ToUnixTimeMilliseconds())
+$downloadDir = Join-Path $tempRoot "download"
+$extractDir = Join-Path $tempRoot "extract"
+New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
+New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+
+$zipName = [string]$job.zip_asset_name
+if ([string]::IsNullOrWhiteSpace($zipName)) {
+  $zipName = "CaseCreator-win64.zip"
+}
+$zipPath = Join-Path $downloadDir $zipName
+
+try {
+  Invoke-WebRequest -Uri ([string]$job.zip_asset_url) -OutFile $zipPath -UseBasicParsing
+} catch {
+  Fail-And-Exit ("Failed to download update zip.`n" + $_.Exception.Message)
+}
+
+$checksumUrl = [string]$job.checksum_asset_url
+if (-not [string]::IsNullOrWhiteSpace($checksumUrl)) {
+  $checksumPath = Join-Path $downloadDir ($zipName + ".sha256")
+  try {
+    Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath -UseBasicParsing
+    $checksumRaw = (Get-Content -LiteralPath $checksumPath -Raw).Trim()
+    $expected = ($checksumRaw -split '\s+')[0].ToLower()
+    $actual = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLower()
+    if ($expected -ne $actual) {
+      Fail-And-Exit "Checksum verification failed for downloaded update package."
+    }
+  } catch {
+    Fail-And-Exit ("Failed checksum verification.`n" + $_.Exception.Message)
+  }
+}
+
+try {
+  Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+} catch {
+  Fail-And-Exit ("Failed to extract update zip.`n" + $_.Exception.Message)
+}
+
+$newRoot = Join-Path $extractDir "CaseCreator"
+$newExe = Join-Path $newRoot "CaseCreator.exe"
+$newInternal = Join-Path $newRoot "_internal"
+if (-not (Test-Path -LiteralPath $newExe)) {
+  Fail-And-Exit "Extracted package missing CaseCreator.exe."
+}
+if (-not (Test-Path -LiteralPath $newInternal)) {
+  Fail-And-Exit "Extracted package missing _internal folder."
+}
+
+$installRoot = [string]$job.install_root
+$backupRoot = $installRoot + ".backup-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+
+if (Test-Path -LiteralPath $installRoot) {
+  try {
+    Move-Item -LiteralPath $installRoot -Destination $backupRoot
+  } catch {
+    Fail-And-Exit ("Failed to move existing install to backup.`n" + $_.Exception.Message)
+  }
+}
+
+try {
+  Move-Item -LiteralPath $newRoot -Destination $installRoot
+} catch {
+  if ((Test-Path -LiteralPath $backupRoot) -and (-not (Test-Path -LiteralPath $installRoot))) {
+    try { Move-Item -LiteralPath $backupRoot -Destination $installRoot } catch { }
+  }
+  Fail-And-Exit ("Failed to replace install folder.`n" + $_.Exception.Message)
+}
+
+$launchExe = Join-Path $installRoot "CaseCreator.exe"
+if (-not (Test-Path -LiteralPath $launchExe)) {
+  if ((Test-Path -LiteralPath $backupRoot) -and (-not (Test-Path -LiteralPath $installRoot))) {
+    try { Move-Item -LiteralPath $backupRoot -Destination $installRoot } catch { }
+  }
+  Fail-And-Exit "Updated install is missing CaseCreator.exe after replacement."
+}
+
+try {
+  Start-Process -FilePath $launchExe | Out-Null
+} catch {
+  if ((Test-Path -LiteralPath $backupRoot) -and (Test-Path -LiteralPath $installRoot)) {
+    try {
+      Remove-Item -LiteralPath $installRoot -Recurse -Force
+      Move-Item -LiteralPath $backupRoot -Destination $installRoot
+    } catch { }
+  }
+  Fail-And-Exit ("Update installed but failed to relaunch Case Creator.`n" + $_.Exception.Message)
+}
+
+Show-Message "Update installed successfully. Relaunching Case Creator."
+exit 0
+"""
+
+
+def launch_external_updater(result: UpdateCheckResult, current_version: str) -> None:
+    if os.name != "nt":
+        raise RuntimeError("Updater is currently supported on Windows only.")
+    if not result.zip_asset_url:
+        raise RuntimeError("Release package URL not found in latest release assets.")
+
+    runner_dir = os.path.join(tempfile.gettempdir(), "CaseCreatorUpdater")
+    os.makedirs(runner_dir, exist_ok=True)
+    timestamp = str(int(time.time() * 1000))
+    job_path = os.path.join(runner_dir, f"update-job-{timestamp}.json")
+    script_path = os.path.join(runner_dir, "case_creator_updater.ps1")
+
+    install_root = get_install_root_path()
+    payload = {
+        "current_version": current_version,
+        "latest_tag": result.latest_tag or "",
+        "zip_asset_name": result.zip_asset_name or "",
+        "zip_asset_url": result.zip_asset_url,
+        "checksum_asset_url": result.checksum_asset_url or "",
+        "install_root": install_root,
+        "current_pid": os.getpid(),
+    }
+    with open(job_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=True)
+        f.write("\n")
+    with open(script_path, "w", encoding="utf-8") as f:
+        f.write(_build_updater_powershell_script())
+
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = (
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | getattr(subprocess, "DETACHED_PROCESS", 0)
+        )
+
+    subprocess.Popen(
+        [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            script_path,
+            "-JobPath",
+            job_path,
+        ],
+        creationflags=creationflags,
+        close_fds=True,
+    )
 
 
 class SettingsDialog(QDialog):
@@ -362,11 +561,8 @@ class SettingsDialog(QDialog):
         self._sync_default_year_combo()
 
     def _open_rules_folder(self):
-        folder = get_live_rules_folder_path()
-        if not os.path.isdir(folder):
-            QMessageBox.information(self, "Rules Folder", "Cannot find rules folder.")
-            return
         try:
+            folder = ensure_live_rules_folder_path_exists()
             if os.name == "nt":
                 os.startfile(folder)  # type: ignore[attr-defined]
             else:
@@ -396,6 +592,115 @@ class ImportWorker(QObject):
             self.error.emit(str(exc))
         finally:
             self.finished.emit()
+
+
+class UpdateCheckWorker(QObject):
+    finished = Signal(object)
+
+    def __init__(self, current_version: str):
+        super().__init__()
+        self.current_version = current_version
+
+    def run(self):
+        result = check_github_latest_release(current_version=self.current_version)
+        self.finished.emit(result)
+
+
+class UpdateCheckDialog(QDialog):
+    def __init__(self, current_version: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Check for Update")
+        self.resize(420, 170)
+        self._thread = None
+        self._worker = None
+        self._result = None
+        self._current_version = current_version
+        self._setup_ui(current_version)
+        self._start_check(current_version)
+
+    def _setup_ui(self, current_version: str):
+        layout = QVBoxLayout(self)
+        self.current_label = QLabel(f"Current version: v{current_version}")
+        self.status_label = QLabel("Checking for updates...")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.current_label)
+        layout.addWidget(self.status_label)
+        buttons_row = QHBoxLayout()
+        self.update_now_button = QPushButton("Update Now")
+        self.update_now_button.setEnabled(False)
+        self.update_now_button.clicked.connect(self._on_update_now_clicked)
+        buttons_row.addWidget(self.update_now_button)
+        buttons_row.addStretch(1)
+        self.close_button = QPushButton("Close")
+        self.close_button.clicked.connect(self.accept)
+        buttons_row.addWidget(self.close_button)
+        layout.addLayout(buttons_row)
+
+    def _start_check(self, current_version: str):
+        self._worker = UpdateCheckWorker(current_version)
+        self._thread = QThread(self)
+        self._worker.moveToThread(self._thread)
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_check_finished)
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+        self._thread.finished.connect(self._clear_thread_refs)
+        self._thread.start()
+
+    def _on_check_finished(self, result: UpdateCheckResult):
+        self._result = result
+        if result.status == STATUS_UP_TO_DATE:
+            self.status_label.setText("You're up to date.")
+            self.update_now_button.setEnabled(False)
+        elif result.status == STATUS_UPDATE_AVAILABLE:
+            latest = result.latest_tag or result.latest_version or "(unknown)"
+            if result.zip_asset_url:
+                self.status_label.setText(f"Update available: {latest}\nInstall now?")
+                self.update_now_button.setEnabled(True)
+            else:
+                self.status_label.setText(
+                    f"Update available: {latest}\nRelease package asset not found."
+                )
+                self.update_now_button.setEnabled(False)
+        elif result.status == STATUS_FAILURE:
+            self.status_label.setText("Could not check for updates.")
+            self.update_now_button.setEnabled(False)
+        else:
+            self.status_label.setText("Could not check for updates.")
+            self.update_now_button.setEnabled(False)
+
+    def _on_update_now_clicked(self):
+        if self._result is None or self._result.status != STATUS_UPDATE_AVAILABLE:
+            return
+        confirmation = QMessageBox.question(
+            self,
+            "Update Available",
+            "Update now?\nThe app will close while the updater installs the new version.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirmation != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            launch_external_updater(self._result, self._current_version)
+        except Exception as exc:
+            QMessageBox.warning(self, "Updater Error", f"Could not start updater.\n{exc}")
+            return
+
+        QMessageBox.information(
+            self,
+            "Updater Started",
+            "Updater started. Case Creator will now close to complete installation.",
+        )
+        app = QApplication.instance()
+        self.accept()
+        if app is not None:
+            QTimer.singleShot(100, app.quit)
+
+    def _clear_thread_refs(self):
+        self._thread = None
+        self._worker = None
 
 
 class AdvancedSettingsDialog(QDialog):
@@ -542,6 +847,11 @@ class MainWindow(QMainWindow):
         self.settings_button.clicked.connect(self._open_settings_dialog)
         self.settings_button.setMaximumWidth(150)
         right_stack.addWidget(self.settings_button)
+
+        self.check_update_button = QPushButton("Check for Update")
+        self.check_update_button.clicked.connect(self._open_update_check_dialog)
+        self.check_update_button.setMaximumWidth(150)
+        right_stack.addWidget(self.check_update_button)
 
         self.advanced_settings_button = QPushButton("Advanced Settings")
         self.advanced_settings_button.clicked.connect(self._open_advanced_settings_guarded)
@@ -812,6 +1122,12 @@ class MainWindow(QMainWindow):
             "Advanced Settings Saved",
             "Advanced settings saved to admin_settings.json.\nRestart the app for changes to fully apply.",
         )
+
+    def _open_update_check_dialog(self):
+        app_info = get_app_info()
+        current_version = str(app_info.get("app_version", "0.0.0")).strip() or "0.0.0"
+        dialog = UpdateCheckDialog(current_version=current_version, parent=self)
+        dialog.exec()
 
     def _apply_ui_preferences(self, payload):
         theme_name = str(payload.get("UI_THEME", "Default")).strip()

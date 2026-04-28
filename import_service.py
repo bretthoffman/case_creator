@@ -1,3 +1,7 @@
+import os
+import sys
+from pathlib import Path
+
 from case_processor_final_clean import process_case_from_id as _process_case_from_id
 
 
@@ -28,9 +32,26 @@ def build_case_id(year, case_number):
 
 def get_app_info():
     """
-    Placeholder app metadata for future UI layers.
+    App metadata for UI surfaces.
     """
+    app_version = os.getenv("CASE_CREATOR_APP_VERSION", "").strip()
+    if not app_version:
+        candidates = []
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "app_version.txt")
+        candidates.append(Path(__file__).resolve().parent / "app_version.txt")
+        for candidate in candidates:
+            try:
+                if candidate.is_file():
+                    app_version = candidate.read_text(encoding="utf-8").strip()
+                    if app_version:
+                        break
+            except Exception:
+                pass
+    if not app_version:
+        app_version = "0.0.0"
     return {
         "app_name": "3Shape Case Importer",
-        "app_version": "0.0.0",
+        "app_version": app_version,
     }
