@@ -55,6 +55,24 @@ jobs:
           Write-Host "OK: pip does not report a 'pathlib' distribution (pip show exit code $pipExit)."
           exit 0
 
+      # Bundled as app_version.txt (see scripts/windows/build_pyside6_onefolder.bat --add-data).
+      # Store without a leading "v" so UI prefixes a single "v" (e.g. tag v0.0.3-base -> file 0.0.3-base).
+      - name: Write app_version.txt for packaged build
+        run: |
+          $ref = $env:GITHUB_REF
+          if ($ref -match '^refs/tags/(.+)$') {
+            $tag = $Matches[1].Trim()
+            if ($tag.StartsWith('v') -or $tag.StartsWith('V')) {
+              $ver = $tag.Substring(1)
+            } else {
+              $ver = $tag
+            }
+          } else {
+            $ver = "0.0.0-ci"
+          }
+          Set-Content -Path "app_version.txt" -Value $ver -NoNewline -Encoding utf8
+          Write-Host "app_version.txt -> '$ver' (from ref $ref)"
+
       - name: Package app (PyInstaller one-folder)
         shell: cmd
         run: call scripts\windows\build_pyside6_onefolder.bat
@@ -74,7 +92,13 @@ jobs:
           if (-not $seed) {
             throw "Bundled unified seed not found under dist\CaseCreator (expected **/business_rules_seed/v1/case_creator_rules.yaml)."
           }
-          Write-Host "OK: exe and bundled seed present."
+          $internal = Join-Path $dist "_internal"
+          $av = Join-Path $internal "app_version.txt"
+          if (-not (Test-Path $av)) {
+            throw "Expected app_version.txt missing under dist\CaseCreator\_internal (PyInstaller data root)."
+          }
+          Write-Host "OK: app_version.txt present:" (Get-Content -Raw $av).Trim()
+          Write-Host "OK: exe, seed, and version file present."
 
       - name: Set zip filename
         run: |

@@ -33,6 +33,14 @@ def build_case_id(year, case_number):
 def get_app_info():
     """
     App metadata for UI surfaces.
+
+    ``app_version`` resolution order:
+    1. ``CASE_CREATOR_APP_VERSION`` environment variable (any string).
+    2. ``app_version.txt`` under PyInstaller ``_MEIPASS`` (one-folder bundle root).
+    3. ``app_version.txt`` next to this module (dev / non-frozen).
+
+    Packaged releases should bundle ``app_version.txt`` with **no** leading ``v`` (e.g. ``0.0.3-base``);
+    the UI prefixes ``v`` for display. Untagged CI builds use ``0.0.0-ci``; local dev default ``0.0.0-dev``.
     """
     app_version = os.getenv("CASE_CREATOR_APP_VERSION", "").strip()
     if not app_version:

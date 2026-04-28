@@ -43,6 +43,17 @@ if errorlevel 1 (
   exit /b 1
 )
 
+REM Packaged version for get_app_info() (frozen: must be bundled via --add-data). CI overwrites before build.
+if not exist "app_version.txt" (
+  echo [INFO] app_version.txt missing; writing default 0.0.0-dev for local packaging.
+  python -c "open('app_version.txt','w',encoding='utf-8').write('0.0.0-dev\n')" 
+  if errorlevel 1 (
+    echo [ERROR] Could not create default app_version.txt
+    popd
+    exit /b 1
+  )
+)
+
 REM Prefer py launcher when available (local dev). On GitHub Actions, use PATH python
 REM so the same interpreter that ran pip install -r requirements.txt runs PyInstaller.
 set "USE_PY_LAUNCHER="
@@ -60,6 +71,7 @@ if defined USE_PY_LAUNCHER (
     --add-data "templates;templates" ^
     --add-data "List of Signature Dr.xlsx;." ^
     --add-data "business_rules_seed\v1\case_creator_rules.yaml;business_rules_seed\v1" ^
+    --add-data "app_version.txt;." ^
     --hidden-import "openpyxl" ^
     "pyside6_ui.py"
 ) else (
@@ -72,6 +84,7 @@ if defined USE_PY_LAUNCHER (
     --add-data "templates;templates" ^
     --add-data "List of Signature Dr.xlsx;." ^
     --add-data "business_rules_seed\v1\case_creator_rules.yaml;business_rules_seed\v1" ^
+    --add-data "app_version.txt;." ^
     --hidden-import "openpyxl" ^
     "pyside6_ui.py"
 )

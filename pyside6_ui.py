@@ -548,6 +548,15 @@ function Stop-JokesIfRunning {
 
 function Save-UpdateZipWithMbProgress {
   param([string]$Uri, [string]$OutPath)
+  function Emit-MbProgress([long]$BytesSoFar, [bool]$HasTotal, [long]$TotalBytes) {
+    $mb = [math]::Round([double]$BytesSoFar / 1MB, 1)
+    if ($HasTotal) {
+      $totalMb = [math]::Round([double]$TotalBytes / 1MB, 1)
+      Write-Host ("Downloading update... " + $mb + " MB / " + $totalMb + " MB")
+    } else {
+      Write-Host ("Downloading update... " + $mb + " MB")
+    }
+  }
   $handler = New-Object System.Net.Http.HttpClientHandler
   $handler.AllowAutoRedirect = $true
   $client = New-Object System.Net.Http.HttpClient($handler)
@@ -577,6 +586,7 @@ function Save-UpdateZipWithMbProgress {
     try {
       $buf = New-Object byte[] 65536
       $got = [long]0
+      Emit-MbProgress -BytesSoFar $got -HasTotal $hasTotal -TotalBytes $totalBytes
       $lastLog = [Environment]::TickCount
       while ($true) {
         $nr = $inStream.Read($buf, 0, $buf.Length)
@@ -587,16 +597,11 @@ function Save-UpdateZipWithMbProgress {
         $elapsed = $tickNow - $lastLog
         if ($elapsed -lt 0) { $elapsed = 400 }
         if ($elapsed -ge 400) {
-          $mb = [math]::Round([double]$got / 1MB, 1)
-          if ($hasTotal) {
-            $totalMb = [math]::Round([double]$totalBytes / 1MB, 1)
-            Write-Host ("Downloading update... " + $mb + " MB / " + $totalMb + " MB")
-          } else {
-            Write-Host ("Downloading update... " + $mb + " MB")
-          }
+          Emit-MbProgress -BytesSoFar $got -HasTotal $hasTotal -TotalBytes $totalBytes
           $lastLog = $tickNow
         }
       }
+      Emit-MbProgress -BytesSoFar $got -HasTotal $hasTotal -TotalBytes $totalBytes
     } finally {
       $outFs.Close()
     }
@@ -1243,20 +1248,13 @@ class UpdateCheckDialog(QDialog):
             )
             return
 
-        log_path = get_updater_log_path()
-        QMessageBox.information(
-            self,
-            "Updater Console",
-            "A separate console window is running the updater.\n\n"
-            "If that window closes instantly, it failed early — check it before dismissing "
-            "(the launcher waits for a key press when the updater exits with an error).\n\n"
-            f"Log file:\n{log_path}\n\n"
-            "Case Creator will close next so the updater can replace the install folder.",
+        append_updater_client_log(
+            "Updater launch confirmed; scheduling app shutdown in 1500ms"
         )
         app = QApplication.instance()
         self.accept()
         if app is not None:
-            QTimer.singleShot(100, app.quit)
+            QTimer.singleShot(1500, app.quit)
 
     def _clear_thread_refs(self):
         self._thread = None
