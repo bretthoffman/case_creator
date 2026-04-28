@@ -1,4 +1,5 @@
 import html
+import os
 import sys
 from collections import deque
 
@@ -191,6 +192,11 @@ LOGOS = {
 }
 
 
+def get_live_rules_folder_path() -> str:
+    local_appdata = os.getenv("LOCALAPPDATA") or os.path.expanduser("~")
+    return os.path.join(local_appdata, "CaseCreator", "business_rules", "v1")
+
+
 class SettingsDialog(QDialog):
     def __init__(
         self,
@@ -269,6 +275,10 @@ class SettingsDialog(QDialog):
         self.default_year_combo = QComboBox()
         years_grid.addWidget(self.default_year_combo, 4, 1)
         self._sync_default_year_combo()
+
+        self.open_rules_folder_button = QPushButton("Open Rules Folder")
+        self.open_rules_folder_button.clicked.connect(self._open_rules_folder)
+        layout.addWidget(self.open_rules_folder_button, alignment=Qt.AlignmentFlag.AlignLeft)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -350,6 +360,19 @@ class SettingsDialog(QDialog):
         self.year_list.takeItem(row)
         self._default_year = self.default_year_combo.currentText().strip() or self._default_year
         self._sync_default_year_combo()
+
+    def _open_rules_folder(self):
+        folder = get_live_rules_folder_path()
+        if not os.path.isdir(folder):
+            QMessageBox.information(self, "Rules Folder", "Cannot find rules folder.")
+            return
+        try:
+            if os.name == "nt":
+                os.startfile(folder)  # type: ignore[attr-defined]
+            else:
+                QMessageBox.information(self, "Rules Folder", f"Rules folder:\n{folder}")
+        except Exception as exc:
+            QMessageBox.warning(self, "Rules Folder", f"Cannot open rules folder.\n{exc}")
 
 
 class ImportWorker(QObject):
