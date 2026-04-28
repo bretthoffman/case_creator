@@ -766,8 +766,16 @@ if (-not $structOk) {
 Write-UpdaterLog "Extracted structure validation OK"
 
 $installRoot = [string]$job.install_root
-$backupRoot = $installRoot + ".backup-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+$backupBase = Join-Path $logDir "backups"
+try {
+  New-Item -ItemType Directory -Path $backupBase -Force | Out-Null
+} catch {
+  Write-UpdaterLog ("Backup directory creation failure: " + $_.Exception.Message)
+  Fail-And-Exit ("Could not create backup directory.`n" + $_.Exception.Message)
+}
+$backupRoot = Join-Path $backupBase ("CaseCreator-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 Write-UpdaterLog ("Install root: " + $installRoot)
+Write-UpdaterLog ("Backup base directory: " + $backupBase)
 Write-UpdaterLog ("Backup path (if replace proceeds): " + $backupRoot)
 
 if (Test-Path -LiteralPath $installRoot) {

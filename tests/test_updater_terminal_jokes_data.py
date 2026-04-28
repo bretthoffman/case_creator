@@ -34,6 +34,8 @@ class UpdaterTerminalJokesDataTests(unittest.TestCase):
         self.assertNotIn("[pscustomobject]@", script)
         self.assertNotIn("$script:DentalJokes", script)
         self.assertIn("$job.jokes", script)
+        self.assertIn('Join-Path $logDir "backups"', script)
+        self.assertIn('Join-Path $backupBase ("CaseCreator-"', script)
 
     def test_job_payload_jokes_round_trip_shape(self):
         jokes = updater_job_jokes_for_payload()
