@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 from collections import deque
+from typing import Tuple
 
 from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
@@ -239,18 +240,208 @@ def append_updater_client_log(message: str) -> None:
         pass
 
 
+def _ps_single_quoted_literal(text: str) -> str:
+    """PowerShell single-quoted string content (escape ' as '')."""
+    return text.replace("'", "''")
+
+
+UPDATER_DENTAL_JOKES_QA: Tuple[Tuple[str, str], ...] = (
+    (
+        "Why did the tooth refuse to apologize?",
+        "Because it knew everyone would eventually have to deal with the root issue.",
+    ),
+    (
+        "Why did the molar get kicked out of the group chat?",
+        "Too much biting commentary.",
+    ),
+    (
+        "Why did the crown act like royalty?",
+        "Because deep down it knew it was covering for something rotten.",
+    ),
+    (
+        "Why did the dentist avoid the haunted house?",
+        "Too many cavities with history.",
+    ),
+    (
+        "Why did the wisdom tooth think it was special?",
+        "Because it caused chaos and called it growth.",
+    ),
+    (
+        "Why did the floss have trust issues?",
+        "It was always getting dragged through someone else's mess.",
+    ),
+    (
+        "Why did the incisor start a fight?",
+        "It had a sharp personality and no emotional enamel.",
+    ),
+    (
+        "Why did the denture look suspicious?",
+        "It had been in too many mouths to play innocent.",
+    ),
+    (
+        "Why did the toothbrush break up with the toothpaste?",
+        "It was tired of carrying the relationship every morning.",
+    ),
+    (
+        "Why did the molar go silent?",
+        "It was grinding through something.",
+    ),
+    (
+        "Why did the patient fear the x-ray?",
+        "It saw what their smile had been hiding.",
+    ),
+    (
+        "Why did the filling get defensive?",
+        "It knew it was just a patch over bad decisions.",
+    ),
+    (
+        "Why did the canine seem unstable?",
+        "It was one bad bite away from snapping.",
+    ),
+    (
+        "Why did the retainer feel powerful?",
+        "It knew everyone eventually moved back without supervision.",
+    ),
+    (
+        "Why did the plaque act confident?",
+        "Because nobody notices the damage until it owns the place.",
+    ),
+    (
+        "Why did the root canal have no friends?",
+        "It got too deep too fast.",
+    ),
+    (
+        "Why did the mirror stop judging people?",
+        "It had seen enough tongues to lose faith.",
+    ),
+    (
+        "Why did the gumline seem dramatic?",
+        "Because once it starts receding, it takes everything personally.",
+    ),
+    (
+        "Why did the extraction seem calm?",
+        "Because sometimes removing the problem is the cleanest conversation.",
+    ),
+    (
+        "Why did the bite guard look exhausted?",
+        "It spent every night absorbing unspoken rage.",
+    ),
+    (
+        "Why did the veneer seem shallow?",
+        "Because that was literally the point.",
+    ),
+    (
+        "Why did the dental chair feel cursed?",
+        "Everyone who sat in it suddenly remembered all their sins.",
+    ),
+    (
+        "Why did the scaler enjoy its job?",
+        "It liked removing things people pretended weren't there.",
+    ),
+    (
+        "Why did the whitening tray seem arrogant?",
+        "Because it made everyone believe brightness was the same as health.",
+    ),
+    (
+        "Why did the drill sound so confident?",
+        "It knew fear didn't need lyrics.",
+    ),
+    (
+        "Why did the abscess get attention?",
+        "Because ignoring pain is just scheduling drama for later.",
+    ),
+    (
+        "Why did the tooth fairy quit?",
+        "She realized she was just buying bones from children.",
+    ),
+    (
+        "Why did the temporary crown feel insecure?",
+        "Because even its name admitted nobody planned to keep it.",
+    ),
+    (
+        "Why did the saliva ejector have boundaries?",
+        "Because someone had to suck it up.",
+    ),
+    (
+        "Why did the molar hate family gatherings?",
+        "Too much pressure from both sides.",
+    ),
+    (
+        "Why did the impression material panic?",
+        "It realized it was only valued when it captured someone's flaws.",
+    ),
+    (
+        "Why did the implant act superior?",
+        "Because unlike everyone else, it was screwed in on purpose.",
+    ),
+    (
+        "Why did the bridge feel dramatic?",
+        "It was literally held together by neighboring problems.",
+    ),
+    (
+        "Why did the tongue get blamed?",
+        "Because it was always involved and never took responsibility.",
+    ),
+    (
+        "Why did the cavity feel misunderstood?",
+        "It wasn't evil, just enabled.",
+    ),
+    (
+        "Why did the night guard know too much?",
+        "It heard what stress does when nobody's watching.",
+    ),
+    (
+        "Why did the dentist like dark humor?",
+        "Because decay is basically comedy with consequences.",
+    ),
+    (
+        "Why did the occlusion test get awkward?",
+        "It proved some people just don't meet right.",
+    ),
+    (
+        "Why did the bur feel dangerous?",
+        "Tiny, fast, and legally allowed near nerves.",
+    ),
+    (
+        "Why did the full arch case scare everyone?",
+        "Because sometimes the mouth chooses violence.",
+    ),
+)
+
+
+def _powershell_dental_jokes_array_literal() -> str:
+    lines = ["$script:DentalJokes = @("]
+    for q, a in UPDATER_DENTAL_JOKES_QA:
+        qe = _ps_single_quoted_literal(q)
+        ae = _ps_single_quoted_literal(a)
+        lines.append(f"  [pscustomobject]@{{ Q = '{qe}'; A = '{ae}' }},")
+    lines.append(")")
+    return "\n".join(lines)
+
+
 def _build_updater_powershell_script() -> str:
-    return r"""
+    dental_block = _powershell_dental_jokes_array_literal()
+    return (
+        r"""
 param(
   [Parameter(Mandatory = $true)]
   [string]$JobPath
 )
 
+$ProgressPreference = "SilentlyContinue"
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms | Out-Null
+try { Add-Type -AssemblyName System.Net.Http } catch { }
 
 $logDir = Join-Path $env:LOCALAPPDATA "CaseCreator\update"
 $logFile = Join-Path $logDir "updater.log"
+
+$script:JokeSync = $null
+$script:JokeState = $null
+
+"""
+        + dental_block
+        + r"""
 
 function Write-UpdaterLog([string]$line) {
   try {
@@ -271,7 +462,128 @@ function Show-Message([string]$msg) {
   } catch { }
 }
 
+function Stop-JokeStream([hashtable]$state) {
+  if ($null -eq $state -or $null -eq $state.PS) { return }
+  try { $null = $state.PS.EndInvoke($state.Handle) } catch { }
+  try { $state.PS.Dispose() } catch { }
+  try {
+    if ($null -ne $state.PS.Runspace) {
+      $state.PS.Runspace.Close()
+      $state.PS.Runspace.Dispose()
+    }
+  } catch { }
+}
+
+function Start-JokeRunspace {
+  param([hashtable]$sync, [object[]]$deck)
+  $rs = [runspacefactory]::CreateRunspace()
+  $rs.Open()
+  $ps = [powershell]::Create()
+  $ps.Runspace = $rs
+  [void]$ps.AddScript({
+    param($syncRef, $jokeDeckInner)
+    function Write-TypewriterToConsole([string]$line, [int]$maxMs) {
+      if ($null -eq $line -or $line.Length -lt 1) { [Console]::WriteLine(); return }
+      $n = $line.Length
+      $per = [int]($maxMs / $n)
+      if ($per -lt 1) { $per = 1 }
+      elseif ($per -gt 30) { $per = 30 }
+      for ($ti = 0; $ti -lt $n; $ti++) {
+        if ($syncRef.Stop) { break }
+        [Console]::Write($line.Substring($ti, 1))
+        Start-Sleep -Milliseconds $per
+      }
+      [Console]::WriteLine()
+    }
+    Start-Sleep -Milliseconds ((Get-Random -Minimum 2000 -Maximum 3001))
+    if ($syncRef.Stop) { return }
+    Write-TypewriterToConsole "While you wait, how about some jokes?" 900
+    for ($ji = 0; $ji -lt $jokeDeckInner.Length; $ji++) {
+      if ($syncRef.Stop) { break }
+      $pair = $jokeDeckInner[$ji]
+      Start-Sleep -Milliseconds ((Get-Random -Minimum 2000 -Maximum 3001))
+      if ($syncRef.Stop) { break }
+      Write-TypewriterToConsole ("Q: " + $pair.Q) 900
+      Start-Sleep -Milliseconds ((Get-Random -Minimum 2000 -Maximum 3001))
+      if ($syncRef.Stop) { break }
+      Write-TypewriterToConsole ("A: " + $pair.A) 900
+    }
+  }).AddArgument($sync).AddArgument($deck)
+  $handle = $ps.BeginInvoke()
+  return @{ PS = $ps; Handle = $handle }
+}
+
+function Stop-JokesIfRunning {
+  try {
+    if ($null -ne $script:JokeSync) { $script:JokeSync.Stop = $true }
+  } catch { }
+  Stop-JokeStream $script:JokeState
+  $script:JokeState = $null
+}
+
+function Save-UpdateZipWithMbProgress {
+  param([string]$Uri, [string]$OutPath)
+  $handler = New-Object System.Net.Http.HttpClientHandler
+  $handler.AllowAutoRedirect = $true
+  $client = New-Object System.Net.Http.HttpClient($handler)
+  $client.Timeout = [timespan]::FromHours(2)
+  try {
+    $resp = $client.GetAsync($Uri).Result
+    if (-not $resp.IsSuccessStatusCode) {
+      throw ("HTTP " + [int]$resp.StatusCode + " " + $resp.ReasonPhrase)
+    }
+    $hasTotal = $false
+    $totalBytes = [long]0
+    try {
+      $lenObj = $resp.Content.Headers.ContentLength
+      if ($null -ne $lenObj) {
+        $lv = $lenObj
+        if (($lenObj | Get-Member -Name HasValue -ErrorAction SilentlyContinue) -and $lenObj.HasValue) {
+          $lv = $lenObj.Value
+        }
+        if ($null -ne $lv -and [long]$lv -gt 0) {
+          $hasTotal = $true
+          $totalBytes = [long]$lv
+        }
+      }
+    } catch { }
+    $inStream = $resp.Content.ReadAsStreamAsync().Result
+    $outFs = [System.IO.File]::Create($OutPath)
+    try {
+      $buf = New-Object byte[] 65536
+      $got = [long]0
+      $lastLog = [Environment]::TickCount
+      while ($true) {
+        $nr = $inStream.Read($buf, 0, $buf.Length)
+        if ($nr -le 0) { break }
+        $outFs.Write($buf, 0, $nr)
+        $got = $got + [long]$nr
+        $tickNow = [Environment]::TickCount
+        $elapsed = $tickNow - $lastLog
+        if ($elapsed -lt 0) { $elapsed = 400 }
+        if ($elapsed -ge 400) {
+          $mb = [math]::Round([double]$got / 1MB, 1)
+          if ($hasTotal) {
+            $totalMb = [math]::Round([double]$totalBytes / 1MB, 1)
+            Write-Host ("Downloading update... " + $mb + " MB / " + $totalMb + " MB")
+          } else {
+            Write-Host ("Downloading update... " + $mb + " MB")
+          }
+          $lastLog = $tickNow
+        }
+      }
+    } finally {
+      $outFs.Close()
+    }
+  } finally {
+    $client.Dispose()
+    $handler.Dispose()
+  }
+  Write-Host "Download complete."
+}
+
 function Fail-And-Exit([string]$msg) {
+  Stop-JokesIfRunning
   Write-UpdaterLog ("FATAL: " + $msg)
   Write-Host ("ERROR: " + $msg) -ForegroundColor Red
   Show-Message $msg
@@ -279,8 +591,48 @@ function Fail-And-Exit([string]$msg) {
   exit 1
 }
 
+function Move-Item-WithRetry {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$LiteralPath,
+    [Parameter(Mandatory = $true)]
+    [string]$Destination,
+    [int]$MaxAttempts = 12,
+    [int]$DelayMilliseconds = 800,
+    [string]$StepLabel = "move"
+  )
+  for ($a = 1; $a -le $MaxAttempts; $a++) {
+    try {
+      Write-UpdaterLog ("[" + $StepLabel + "] attempt " + $a + "/" + $MaxAttempts + " `"$LiteralPath`" -> `"$Destination`" (cwd=" + (Get-Location).Path + ")")
+      Move-Item -LiteralPath $LiteralPath -Destination $Destination -ErrorAction Stop
+      Write-UpdaterLog ("[" + $StepLabel + "] success on attempt " + $a)
+      return
+    } catch {
+      Write-UpdaterLog ("[" + $StepLabel + "] attempt " + $a + " failed: " + $_.Exception.Message)
+      if ($a -ge $MaxAttempts) {
+        throw $_
+      }
+      Start-Sleep -Milliseconds $DelayMilliseconds
+    }
+  }
+}
+
 Write-UpdaterLog "===== Updater launch start ====="
 Write-Step "Case Creator updater starting (log file: $logFile)"
+
+$initialCwd = (Get-Location).Path
+Write-UpdaterLog ("Initial PowerShell working directory: " + $initialCwd)
+$scriptFullPath = $PSCommandPath
+if ([string]::IsNullOrWhiteSpace($scriptFullPath)) {
+  $scriptFullPath = "(unknown)"
+}
+Write-UpdaterLog ("Updater script path: " + $scriptFullPath)
+$runnerRoot = Split-Path -Parent $scriptFullPath
+if ([string]::IsNullOrWhiteSpace($runnerRoot)) {
+  $runnerRoot = $env:TEMP
+}
+Set-Location -LiteralPath $runnerRoot
+Write-UpdaterLog ("Working directory set to: " + (Get-Location).Path)
 
 if (-not (Test-Path -LiteralPath $JobPath)) {
   Fail-And-Exit "Update job file not found."
@@ -292,12 +644,21 @@ $job = Get-Content -LiteralPath $JobPath -Raw | ConvertFrom-Json
 $pidToWait = [int]$job.current_pid
 Write-UpdaterLog ("Waiting for main app PID " + $pidToWait + " to exit (poll up to ~45s)")
 
+$pidGone = $false
 for ($i = 0; $i -lt 90; $i++) {
   $mainProc = Get-Process -Id $pidToWait -ErrorAction SilentlyContinue
-  if (-not $mainProc) { break }
+  if (-not $mainProc) {
+    $pidGone = $true
+    Write-UpdaterLog ("Main app PID " + $pidToWait + " no longer running (poll " + ($i + 1) + "/90)")
+    break
+  }
   Start-Sleep -Milliseconds 500
 }
-Write-UpdaterLog "Main app wait finished (process gone or timeout reached)"
+if (-not $pidGone) {
+  Write-UpdaterLog "WARNING: main app PID still running after full wait window (~45s); folder move may fail"
+}
+Write-UpdaterLog "Post-exit stabilization delay (2s) before touching install folder"
+Start-Sleep -Seconds 2
 
 $tempRoot = Join-Path $env:TEMP ("CaseCreatorUpdaterRun-" + [DateTimeOffset]::Now.ToUnixTimeMilliseconds())
 $downloadDir = Join-Path $tempRoot "download"
@@ -312,9 +673,19 @@ if ([string]::IsNullOrWhiteSpace($zipName)) {
 }
 $zipPath = Join-Path $downloadDir $zipName
 
+$deckForJokes = [object[]]@($script:DentalJokes)
+for ($si = $deckForJokes.Length - 1; $si -gt 0; $si--) {
+  $sj = Get-Random -Minimum 0 -Maximum ($si + 1)
+  $t = $deckForJokes[$si]
+  $deckForJokes[$si] = $deckForJokes[$sj]
+  $deckForJokes[$sj] = $t
+}
+$script:JokeSync = [hashtable]::Synchronized(@{ Stop = $false })
+$script:JokeState = Start-JokeRunspace -sync $script:JokeSync -deck $deckForJokes
+
 Write-UpdaterLog ("Download start: " + [string]$job.zip_asset_url)
 try {
-  Invoke-WebRequest -Uri ([string]$job.zip_asset_url) -OutFile $zipPath -UseBasicParsing
+  Save-UpdateZipWithMbProgress -Uri ([string]$job.zip_asset_url) -OutPath $zipPath
   Write-UpdaterLog ("Download success: " + $zipPath)
 } catch {
   Write-UpdaterLog ("Download failure: " + $_.Exception.Message)
@@ -377,11 +748,15 @@ Write-UpdaterLog ("Backup path (if replace proceeds): " + $backupRoot)
 if (Test-Path -LiteralPath $installRoot) {
   try {
     Write-UpdaterLog ("Moving existing install to backup: " + $backupRoot)
-    Move-Item -LiteralPath $installRoot -Destination $backupRoot
+    Move-Item-WithRetry -LiteralPath $installRoot -Destination $backupRoot -StepLabel "backup-move"
     Write-UpdaterLog "Backup move success"
   } catch {
-    Write-UpdaterLog ("Backup move failure: " + $_.Exception.Message)
-    Fail-And-Exit ("Failed to move existing install to backup.`n" + $_.Exception.Message)
+    Write-UpdaterLog ("Backup move failure after retries: " + $_.Exception.Message)
+    $lockHint = ""
+    if ($_.Exception.Message -match 'in use|being used|cannot access') {
+      $lockHint = "`n`nThe install folder may still be locked (Explorer, antivirus, or another program). Close windows under that folder, wait a few seconds, and try again."
+    }
+    Fail-And-Exit ("Failed to move existing install to backup.`n" + $_.Exception.Message + $lockHint)
   }
 } else {
   Write-UpdaterLog "No existing install folder; fresh install path"
@@ -389,7 +764,7 @@ if (Test-Path -LiteralPath $installRoot) {
 
 try {
   Write-UpdaterLog ("Moving extracted app into install root: " + $installRoot)
-  Move-Item -LiteralPath $newRoot -Destination $installRoot
+  Move-Item-WithRetry -LiteralPath $newRoot -Destination $installRoot -StepLabel "install-move"
   Write-UpdaterLog "Install folder replacement success"
 } catch {
   Write-UpdaterLog ("Install folder replacement failure: " + $_.Exception.Message)
@@ -441,12 +816,14 @@ try {
   Fail-And-Exit ("Update installed but failed to relaunch Case Creator.`n" + $_.Exception.Message)
 }
 
+Stop-JokesIfRunning
 Write-UpdaterLog "FINAL: success"
 Write-Step "Update finished successfully. Log: $logFile"
 Show-Message "Update installed successfully. Relaunching Case Creator."
 Start-Sleep -Seconds 2
 exit 0
 """
+    )
 
 
 def launch_external_updater(result: UpdateCheckResult, current_version: str) -> subprocess.Popen:
@@ -480,7 +857,8 @@ def launch_external_updater(result: UpdateCheckResult, current_version: str) -> 
 
     append_updater_client_log(
         "Launching external updater | "
-        f"script={script_path} | job={job_path} | install_root={install_root} | "
+        f"script={script_path} | job={job_path} | subprocess_cwd={runner_dir} | "
+        f"install_root={install_root} | "
         f"intended_release={intended_release!r} | current_version={current_version!r} | "
         f"pid={os.getpid()}"
     )
@@ -505,6 +883,7 @@ def launch_external_updater(result: UpdateCheckResult, current_version: str) -> 
             ],
             creationflags=creationflags,
             close_fds=True,
+            cwd=runner_dir,
         )
     except OSError as exc:
         append_updater_client_log(f"ERROR: subprocess.Popen failed: {exc!r}")
