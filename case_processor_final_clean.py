@@ -15,6 +15,7 @@ from domain.decisions.manual_review_selector import (
 from domain.decisions.destination_selector import select_destination
 from domain.decisions.template_selector import select_template_path
 from domain.rules import routing_rules, naming_rules
+from infrastructure.config.argen_modes_runtime import resolve_contact_model_design_field
 # 📦 Paths & flags
 from config import (
     DEBUG_MODE,
@@ -803,6 +804,7 @@ def generate_final_xml(case_data, output_path):
     case_data["DELIVER_DATE"] = str(deliver_ts)
 
     # 5. Build substitution map
+    template_key = os.path.basename(os.path.dirname(template_path))
     raw_shade = case_data.get("shade", "") or ""
     # Strip a leading "Vita Classic-" (case-insensitive; tolerates spaces/colons/dashes)
     shade_clean = re.sub(r'^\s*vita\s*classic\s*[-:\s]*', '', raw_shade, flags=re.IGNORECASE).strip()
@@ -833,6 +835,9 @@ def generate_final_xml(case_data, output_path):
         "ORDER_COMMENTS": safe_comments,
         **id_block
     }
+
+    if template_key in {"argen_modeless_adzir", "argen_modeless_envision"}:
+        substitutions["ARGEN_DESIGN_VALUE"] = resolve_contact_model_design_field()
 
 
     # 6. Material substitution

@@ -53,6 +53,7 @@ ALLOWED_ROUTE_FAMILY_KEYS = {"argen", "ai", "study", "anterior"}
 ALLOWED_DESTINATION_KEYS = {routing_rules.DEST_ARGEN, routing_rules.DEST_1_9}
 # Live values for argen_modes.contact_model_mode (see validate_argen_modes for legacy migration).
 ALLOWED_CONTACT_MODEL_MODES = frozenset({"off", "on"})
+ALLOWED_CONTACT_MODEL_DESIGN_FIELD_VALUES = frozenset({"No", "3Shape Automate"})
 _LEGACY_CONTACT_MODEL_MODE_MAP = {
     "legacy_default": "off",
     "always_without_contact_models": "off",
@@ -178,6 +179,8 @@ def default_argen_modes() -> Dict[str, Any]:
         "version": SCHEMA_VERSION,
         "enabled": True,
         "contact_model_mode": "off",
+        # Historical modeless templates emitted this value when hardcoded.
+        "contact_model_design_field": "3Shape Automate",
     }
 
 
@@ -526,10 +529,20 @@ def validate_argen_modes(data: Any) -> ValidationResult:
             f"{sorted(_LEGACY_CONTACT_MODEL_MODE_MAP)} are accepted and normalized)."
         )
 
+    design_field = data.get("contact_model_design_field", "3Shape Automate")
+    if not isinstance(design_field, str):
+        errors.append("contact_model_design_field must be a string.")
+    elif design_field not in ALLOWED_CONTACT_MODEL_DESIGN_FIELD_VALUES:
+        errors.append(
+            "contact_model_design_field must be one of "
+            f"{sorted(ALLOWED_CONTACT_MODEL_DESIGN_FIELD_VALUES)}."
+        )
+
     normalized = {
         "version": SCHEMA_VERSION,
         "enabled": bool(data.get("enabled", True)),
         "contact_model_mode": normalized_mode,
+        "contact_model_design_field": design_field,
     }
     return ValidationResult(valid=not errors, normalized=normalized, errors=errors, warnings=warnings)
 

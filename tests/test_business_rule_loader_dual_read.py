@@ -215,6 +215,46 @@ class TestBusinessRuleLoaderUnifiedOnly(unittest.TestCase):
             self.assertEqual(preview.rules_load_source, "unified")
             self.assertFalse(preview.has_errors)
 
+    def test_frozen_seed_reuses_existing_casecreator_root_and_preserves_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as appdata, tempfile.TemporaryDirectory() as bundled:
+            existing_root = Path(appdata) / "CaseCreator"
+            existing_root.mkdir(parents=True, exist_ok=True)
+            local_settings = existing_root / "local_settings.json"
+            admin_settings = existing_root / "admin_settings.json"
+            local_before = '{"machine":"A","theme":"dark"}\n'
+            admin_before = '{"machine":"A","admin":true}\n'
+            local_settings.write_text(local_before, encoding="utf-8")
+            admin_settings.write_text(admin_before, encoding="utf-8")
+
+            seed_dir = Path(bundled) / "business_rules_seed" / "v1"
+            seed_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy(V1 / "case_creator_rules.yaml", seed_dir / "case_creator_rules.yaml")
+
+            with patch("infrastructure.config.business_rule_loader._is_frozen_windows", return_value=True):
+                with patch.dict("os.environ", {"LOCALAPPDATA": appdata}, clear=False):
+                    preview = loader.load_business_rule_config_preview()
+
+            live = existing_root / "business_rules" / "v1" / "case_creator_rules.yaml"
+            self.assertTrue(live.is_file(), "expected seeded external unified file in existing root")
+            self.assertEqual(preview.rules_load_source, "unified")
+            self.assertEqual(local_settings.read_text(encoding="utf-8"), local_before)
+            self.assertEqual(admin_settings.read_text(encoding="utf-8"), admin_before)
+
+    def test_bundled_seed_path_fallback_uses_exe_dir_when_meipass_path_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            meipass = Path(td) / "missing_meipass_root"
+            exe_dir = Path(td) / "fake_exe_dir"
+            bundled_seed = exe_dir / "business_rules_seed" / "v1"
+            bundled_seed.mkdir(parents=True, exist_ok=True)
+            seeded = bundled_seed / "case_creator_rules.yaml"
+            seeded.write_text("unified_version: 1\n", encoding="utf-8")
+
+            with patch.object(loader.sys, "_MEIPASS", str(meipass), create=True):
+                with patch.object(loader.sys, "executable", str(exe_dir / "CaseCreator.exe"), create=True):
+                    resolved = loader._resolve_bundled_seed_path()
+
+            self.assertEqual(resolved.resolve(), seeded.resolve())
+
     def test_frozen_existing_external_file_is_not_overwritten(self) -> None:
         with tempfile.TemporaryDirectory() as appdata, tempfile.TemporaryDirectory() as bundled:
             external = Path(appdata) / "CaseCreator" / "business_rules" / "v1"

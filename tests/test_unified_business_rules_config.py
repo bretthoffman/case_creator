@@ -155,6 +155,56 @@ class TestUnifiedBusinessRulesConfig(unittest.TestCase):
             result.errors,
         )
 
+    def test_argen_contact_model_design_field_allowed(self) -> None:
+        for value in ("No", "3Shape Automate"):
+            doc = {
+                "unified_version": 1,
+                "argen_modes": {
+                    "version": 1,
+                    "enabled": True,
+                    "contact_model_mode": "off",
+                    "contact_model_design_field": value,
+                },
+            }
+            result = schemas.validate_unified_business_rules_config(doc)
+            self.assertTrue(result.valid, result.errors)
+            assert result.normalized is not None
+            self.assertEqual(result.normalized["argen_modes"]["contact_model_design_field"], value)
+
+    def test_argen_contact_model_design_field_rejects_unknown(self) -> None:
+        doc = {
+            "unified_version": 1,
+            "argen_modes": {
+                "version": 1,
+                "enabled": True,
+                "contact_model_mode": "off",
+                "contact_model_design_field": "maybe",
+            },
+        }
+        result = schemas.validate_unified_business_rules_config(doc)
+        self.assertFalse(result.valid)
+        self.assertTrue(
+            any("contact_model_design_field must be one of" in e for e in result.errors),
+            result.errors,
+        )
+
+    def test_argen_contact_model_design_field_omitted_defaults_to_historical_value(self) -> None:
+        doc = {
+            "unified_version": 1,
+            "argen_modes": {
+                "version": 1,
+                "enabled": True,
+                "contact_model_mode": "off",
+            },
+        }
+        result = schemas.validate_unified_business_rules_config(doc)
+        self.assertTrue(result.valid, result.errors)
+        assert result.normalized is not None
+        self.assertEqual(
+            result.normalized["argen_modes"]["contact_model_design_field"],
+            "3Shape Automate",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

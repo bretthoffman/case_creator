@@ -52,10 +52,22 @@ def _resolve_project_root() -> Path:
 def _resolve_bundled_seed_path(*, bundled_root_override: Optional[str] = None) -> Path:
     if bundled_root_override:
         return Path(bundled_root_override) / BUNDLED_SEED_RELATIVE_PATH
+    candidates: List[Path] = []
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
-        return Path(meipass) / BUNDLED_SEED_RELATIVE_PATH
-    return _resolve_project_root() / BUNDLED_SEED_RELATIVE_PATH
+        candidates.append(Path(meipass) / BUNDLED_SEED_RELATIVE_PATH)
+
+    # Some frozen one-folder layouts place add-data files next to the executable.
+    exe_dir = Path(getattr(sys, "executable", "")).resolve().parent if getattr(sys, "executable", "") else None
+    if exe_dir is not None:
+        candidates.append(exe_dir / BUNDLED_SEED_RELATIVE_PATH)
+
+    candidates.append(_resolve_project_root() / BUNDLED_SEED_RELATIVE_PATH)
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
 
 
 def resolve_unified_runtime_paths(

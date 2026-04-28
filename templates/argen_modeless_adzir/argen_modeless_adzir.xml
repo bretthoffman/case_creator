@@ -388,7 +388,7 @@
           <Property name="OrderID" value="{{CASE_ID}}"/>
           <Property name="FieldID" value="Argen_Design_Workflow"/>
           <Property name="FieldCaption" value="Design"/>
-          <Property name="Value" value="3Shape Automate"/>
+          <Property name="Value" value="{{ARGEN_DESIGN_VALUE}}"/>
           <Property name="Kind" value="cdkPublic"/>
         </Object>
       </List>

@@ -181,3 +181,4 @@ argen_modes:
   version: 1
   enabled: true
   contact_model_mode: 'off'
+  contact_model_design_field: 3Shape Automate

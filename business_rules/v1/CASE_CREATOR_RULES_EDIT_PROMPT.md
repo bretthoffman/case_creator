@@ -128,6 +128,7 @@ argen_modes:
   version: 1
   enabled: true
   contact_model_mode: "off"
+  contact_model_design_field: "3Shape Automate"
 
 ================================================================================
 GENERAL YAML EDITING RULES
@@ -570,6 +571,10 @@ Allowed contact_model_mode values only:
 - "off"
 - "on"
 
+Allowed contact_model_design_field values only:
+- "No"
+- "3Shape Automate"
+
 Keep them quoted.
 
 Meaning:
@@ -577,6 +582,8 @@ Meaning:
 - "on" = eligible non-study Argen cases use:
   - argen_modeless_adzir for Adzir cases
   - argen_modeless_envision for other eligible Argen cases
+- contact_model_design_field controls Argen_Design_Workflow custom-data value
+  for those two modeless templates only.
 
 Do not use:
 - legacy_default

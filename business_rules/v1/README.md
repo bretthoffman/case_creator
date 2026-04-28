@@ -10,13 +10,6 @@ Edit this file in the repo:
 
 After any change, **save** and **restart** the app.
 
-## Packaged installs vs repo files
-
-- Repo/source-dev uses `business_rules/v1/case_creator_rules.yaml`.
-- Packaged Windows installs seed and then use:
-  - `%LOCALAPPDATA%\CaseCreator\business_rules\v1\case_creator_rules.yaml`
-- `business_rules_seed/v1/case_creator_rules.yaml` is a bundled seed copy, not a second operator file.
-
 ---
 
 ## Destination vs label (important)
@@ -68,6 +61,12 @@ Use doctor rules to choose template keys and/or bounded label override keys.
 ## 4) argen_modes
 
 - Set `contact_model_mode` to `"off"` or `"on"`.
+- Set `contact_model_design_field` to one of:
+  - `"3Shape Automate"` (default/historical behavior)
+  - `"No"`
+- `contact_model_design_field` only affects modeless Argen templates:
+  - `argen_modeless_adzir`
+  - `argen_modeless_envision`
 
 ---
 
@@ -125,6 +124,7 @@ argen_modes:
   version: 1
   enabled: true
   contact_model_mode: "on"
+  contact_model_design_field: "No"
 ```
 
 ### Example D — Add a non-Argen shade marker
