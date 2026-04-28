@@ -14,6 +14,7 @@ class UpdaterLaunchWorkdirTests(unittest.TestCase):
             captured = {}
 
             def fake_popen(*args, **kwargs):
+                captured["argv"] = args[0]
                 captured["kwargs"] = kwargs
                 mock_proc = mock.MagicMock()
                 mock_proc.pid = 99999
@@ -35,12 +36,20 @@ class UpdaterLaunchWorkdirTests(unittest.TestCase):
 
             install_root = get_install_root_path()
             cwd = captured["kwargs"].get("cwd")
+            argv = captured["argv"]
             self.assertIsNotNone(cwd)
             self.assertTrue(os.path.normcase(cwd).startswith(os.path.normcase(tmp)))
             self.assertNotEqual(
                 os.path.normcase(os.path.abspath(cwd)),
                 os.path.normcase(os.path.abspath(install_root)),
             )
+            self.assertGreaterEqual(len(argv), 4)
+            self.assertEqual(argv[1].lower(), "/c")
+            self.assertTrue(
+                str(argv[2]).lower().endswith("case_creator_updater.cmd"),
+                msg=f"expected .cmd launcher in argv, got {argv!r}",
+            )
+            self.assertTrue(str(argv[3]).endswith(".json"))
 
 
 if __name__ == "__main__":

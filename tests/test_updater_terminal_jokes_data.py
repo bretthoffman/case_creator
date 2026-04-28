@@ -23,6 +23,7 @@ class UpdaterTerminalJokesDataTests(unittest.TestCase):
             "Invoke-WebRequest -Uri ([string]$job.zip_asset_url)",
             script,
         )
+        self.assertIn("IMMEDIATE: Case Creator updater script entry", script)
 
 
 if __name__ == "__main__":

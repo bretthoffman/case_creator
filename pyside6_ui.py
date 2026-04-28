@@ -428,20 +428,8 @@ param(
   [string]$JobPath
 )
 
-$ProgressPreference = "SilentlyContinue"
-$ErrorActionPreference = "Stop"
-Add-Type -AssemblyName System.Windows.Forms | Out-Null
-try { Add-Type -AssemblyName System.Net.Http } catch { }
-
 $logDir = Join-Path $env:LOCALAPPDATA "CaseCreator\update"
 $logFile = Join-Path $logDir "updater.log"
-
-$script:JokeSync = $null
-$script:JokeState = $null
-
-"""
-        + dental_block
-        + r"""
 
 function Write-UpdaterLog([string]$line) {
   try {
@@ -450,6 +438,46 @@ function Write-UpdaterLog([string]$line) {
     Add-Content -LiteralPath $logFile -Value ("[$ts] [updater] " + $line) -Encoding UTF8
   } catch { }
 }
+
+Write-UpdaterLog "IMMEDIATE: Case Creator updater script entry (first line after param)"
+try {
+  [Console]::WriteLine("[Case Creator Updater] Started. Log: $logFile")
+} catch {
+  Write-Host "[Case Creator Updater] Started. Log: $logFile"
+}
+
+if ([string]::IsNullOrWhiteSpace($JobPath)) {
+  Write-UpdaterLog "FATAL: -JobPath parameter is empty"
+  Write-Host "ERROR: Missing update job path (-JobPath). Launcher or invocation may be wrong." -ForegroundColor Red
+  exit 2
+}
+if (-not (Test-Path -LiteralPath $JobPath)) {
+  Write-UpdaterLog ("FATAL: Job file not found at: " + $JobPath)
+  Write-Host ("ERROR: Update job file not found:`n" + $JobPath) -ForegroundColor Red
+  exit 2
+}
+
+$job = $null
+try {
+  $jobRaw = Get-Content -LiteralPath $JobPath -Raw -ErrorAction Stop
+  $job = $jobRaw | ConvertFrom-Json
+} catch {
+  Write-UpdaterLog ("FATAL: Could not parse job JSON: " + $_.Exception.Message)
+  Write-Host ("ERROR: Invalid or unreadable job JSON.`n" + $_.Exception.Message) -ForegroundColor Red
+  exit 3
+}
+
+$ProgressPreference = "SilentlyContinue"
+$ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.Windows.Forms | Out-Null
+try { Add-Type -AssemblyName System.Net.Http } catch { }
+
+$script:JokeSync = $null
+$script:JokeState = $null
+
+"""
+        + dental_block
+        + r"""
 
 function Write-Step([string]$line) {
   Write-Host $line
@@ -634,13 +662,8 @@ if ([string]::IsNullOrWhiteSpace($runnerRoot)) {
 Set-Location -LiteralPath $runnerRoot
 Write-UpdaterLog ("Working directory set to: " + (Get-Location).Path)
 
-if (-not (Test-Path -LiteralPath $JobPath)) {
-  Fail-And-Exit "Update job file not found."
-}
-
 Write-UpdaterLog ("Job file path: " + $JobPath)
 
-$job = Get-Content -LiteralPath $JobPath -Raw | ConvertFrom-Json
 $pidToWait = [int]$job.current_pid
 Write-UpdaterLog ("Waiting for main app PID " + $pidToWait + " to exit (poll up to ~45s)")
 
@@ -826,6 +849,32 @@ exit 0
     )
 
 
+def _write_updater_cmd_launcher(runner_dir: str) -> str:
+    """
+    Windows CMD wrapper: keeps the console open (pause) when PowerShell exits non-zero
+    so parse errors and early failures are readable.
+    """
+    path = os.path.join(runner_dir, "case_creator_updater.cmd")
+    # ASCII + CRLF: reliable for cmd.exe
+    content = (
+        '@echo off\r\n'
+        'setlocal\r\n'
+        'cd /d "%~dp0"\r\n'
+        'powershell.exe -NoProfile -NoLogo -ExecutionPolicy Bypass '
+        '-File "%~dp0case_creator_updater.ps1" -JobPath "%~1"\r\n'
+        'if errorlevel 1 (\r\n'
+        '  echo.\r\n'
+        '  echo Case Creator updater exited with an error. Review messages above.\r\n'
+        '  echo Log file: %LOCALAPPDATA%\\CaseCreator\\update\\updater.log\r\n'
+        '  pause\r\n'
+        ')\r\n'
+        'endlocal\r\n'
+    )
+    with open(path, "w", encoding="ascii", newline="\n") as handle:
+        handle.write(content)
+    return path
+
+
 def launch_external_updater(result: UpdateCheckResult, current_version: str) -> subprocess.Popen:
     if os.name != "nt":
         raise RuntimeError("Updater is currently supported on Windows only.")
@@ -855,13 +904,18 @@ def launch_external_updater(result: UpdateCheckResult, current_version: str) -> 
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(_build_updater_powershell_script())
 
+    launcher_path = _write_updater_cmd_launcher(runner_dir)
+    comspec = os.environ.get("COMSPEC", "cmd.exe")
+    popen_argv = [comspec, "/c", launcher_path, job_path]
     append_updater_client_log(
         "Launching external updater | "
-        f"script={script_path} | job={job_path} | subprocess_cwd={runner_dir} | "
+        f"launcher={launcher_path} | script={script_path} | job={job_path} | "
+        f"subprocess_cwd={runner_dir} | comspec={comspec} | "
         f"install_root={install_root} | "
         f"intended_release={intended_release!r} | current_version={current_version!r} | "
         f"pid={os.getpid()}"
     )
+    append_updater_client_log("subprocess argv (JSON): " + json.dumps(popen_argv))
 
     creationflags = 0
     if os.name == "nt":
@@ -870,17 +924,7 @@ def launch_external_updater(result: UpdateCheckResult, current_version: str) -> 
 
     try:
         proc = subprocess.Popen(
-            [
-                "powershell.exe",
-                "-NoProfile",
-                "-NoLogo",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                script_path,
-                "-JobPath",
-                job_path,
-            ],
+            popen_argv,
             creationflags=creationflags,
             close_fds=True,
             cwd=runner_dir,
@@ -1201,10 +1245,15 @@ class UpdateCheckDialog(QDialog):
             )
             return
 
+        log_path = get_updater_log_path()
         QMessageBox.information(
             self,
-            "Updater Started",
-            "Updater started. Case Creator will now close to complete installation.",
+            "Updater Console",
+            "A separate console window is running the updater.\n\n"
+            "If that window closes instantly, it failed early — check it before dismissing "
+            "(the launcher waits for a key press when the updater exits with an error).\n\n"
+            f"Log file:\n{log_path}\n\n"
+            "Case Creator will close next so the updater can replace the install folder.",
         )
         app = QApplication.instance()
         self.accept()
