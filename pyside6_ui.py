@@ -218,6 +218,27 @@ def get_install_root_path() -> str:
     return os.path.join(os.path.expanduser("~"), "Documents", "CaseCreator")
 
 
+def get_updater_state_dir() -> str:
+    local_appdata = os.getenv("LOCALAPPDATA") or os.path.expanduser("~")
+    return os.path.join(local_appdata, "CaseCreator", "update")
+
+
+def get_updater_log_path() -> str:
+    return os.path.join(get_updater_state_dir(), "updater.log")
+
+
+def append_updater_client_log(message: str) -> None:
+    """Best-effort line append from the main app before/around updater launch."""
+    try:
+        log_path = get_updater_log_path()
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        with open(log_path, "a", encoding="utf-8") as handle:
+            handle.write(f"[{ts}] [client] {message}\n")
+    except OSError:
+        pass
+
+
 def _build_updater_powershell_script() -> str:
     return r"""
 param(
@@ -228,33 +249,62 @@ param(
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms | Out-Null
 
+$logDir = Join-Path $env:LOCALAPPDATA "CaseCreator\update"
+$logFile = Join-Path $logDir "updater.log"
+
+function Write-UpdaterLog([string]$line) {
+  try {
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
+    Add-Content -LiteralPath $logFile -Value ("[$ts] [updater] " + $line) -Encoding UTF8
+  } catch { }
+}
+
+function Write-Step([string]$line) {
+  Write-Host $line
+  Write-UpdaterLog $line
+}
+
 function Show-Message([string]$msg) {
-  [System.Windows.Forms.MessageBox]::Show($msg, "Case Creator Updater") | Out-Null
+  try {
+    [System.Windows.Forms.MessageBox]::Show($msg, "Case Creator Updater") | Out-Null
+  } catch { }
 }
 
 function Fail-And-Exit([string]$msg) {
-  Show-Message($msg)
+  Write-UpdaterLog ("FATAL: " + $msg)
+  Write-Host ("ERROR: " + $msg) -ForegroundColor Red
+  Show-Message $msg
+  Write-UpdaterLog "FINAL: failure"
   exit 1
 }
+
+Write-UpdaterLog "===== Updater launch start ====="
+Write-Step "Case Creator updater starting (log file: $logFile)"
 
 if (-not (Test-Path -LiteralPath $JobPath)) {
   Fail-And-Exit "Update job file not found."
 }
 
+Write-UpdaterLog ("Job file path: " + $JobPath)
+
 $job = Get-Content -LiteralPath $JobPath -Raw | ConvertFrom-Json
 $pidToWait = [int]$job.current_pid
+Write-UpdaterLog ("Waiting for main app PID " + $pidToWait + " to exit (poll up to ~45s)")
 
 for ($i = 0; $i -lt 90; $i++) {
-  $proc = Get-Process -Id $pidToWait -ErrorAction SilentlyContinue
-  if (-not $proc) { break }
+  $mainProc = Get-Process -Id $pidToWait -ErrorAction SilentlyContinue
+  if (-not $mainProc) { break }
   Start-Sleep -Milliseconds 500
 }
+Write-UpdaterLog "Main app wait finished (process gone or timeout reached)"
 
 $tempRoot = Join-Path $env:TEMP ("CaseCreatorUpdaterRun-" + [DateTimeOffset]::Now.ToUnixTimeMilliseconds())
 $downloadDir = Join-Path $tempRoot "download"
 $extractDir = Join-Path $tempRoot "extract"
 New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
 New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+Write-UpdaterLog ("Temp workspace: " + $tempRoot)
 
 $zipName = [string]$job.zip_asset_name
 if ([string]::IsNullOrWhiteSpace($zipName)) {
@@ -262,14 +312,18 @@ if ([string]::IsNullOrWhiteSpace($zipName)) {
 }
 $zipPath = Join-Path $downloadDir $zipName
 
+Write-UpdaterLog ("Download start: " + [string]$job.zip_asset_url)
 try {
   Invoke-WebRequest -Uri ([string]$job.zip_asset_url) -OutFile $zipPath -UseBasicParsing
+  Write-UpdaterLog ("Download success: " + $zipPath)
 } catch {
+  Write-UpdaterLog ("Download failure: " + $_.Exception.Message)
   Fail-And-Exit ("Failed to download update zip.`n" + $_.Exception.Message)
 }
 
 $checksumUrl = [string]$job.checksum_asset_url
 if (-not [string]::IsNullOrWhiteSpace($checksumUrl)) {
+  Write-UpdaterLog "Checksum verification start (remote .sha256 present)"
   $checksumPath = Join-Path $downloadDir ($zipName + ".sha256")
   try {
     Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath -UseBasicParsing
@@ -277,75 +331,125 @@ if (-not [string]::IsNullOrWhiteSpace($checksumUrl)) {
     $expected = ($checksumRaw -split '\s+')[0].ToLower()
     $actual = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLower()
     if ($expected -ne $actual) {
+      Write-UpdaterLog ("Checksum mismatch: expected=" + $expected + " actual=" + $actual)
       Fail-And-Exit "Checksum verification failed for downloaded update package."
     }
+    Write-UpdaterLog "Checksum verification OK"
   } catch {
+    Write-UpdaterLog ("Checksum verification failure: " + $_.Exception.Message)
     Fail-And-Exit ("Failed checksum verification.`n" + $_.Exception.Message)
   }
+} else {
+  Write-UpdaterLog "Checksum verification skipped (no checksum_asset_url in job)"
 }
 
+Write-UpdaterLog ("Extract start -> " + $extractDir)
 try {
   Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+  Write-UpdaterLog "Extract success"
 } catch {
+  Write-UpdaterLog ("Extract failure: " + $_.Exception.Message)
   Fail-And-Exit ("Failed to extract update zip.`n" + $_.Exception.Message)
 }
 
 $newRoot = Join-Path $extractDir "CaseCreator"
 $newExe = Join-Path $newRoot "CaseCreator.exe"
 $newInternal = Join-Path $newRoot "_internal"
+$structOk = $true
 if (-not (Test-Path -LiteralPath $newExe)) {
-  Fail-And-Exit "Extracted package missing CaseCreator.exe."
+  Write-UpdaterLog "Extracted structure validation FAIL: missing CaseCreator.exe"
+  $structOk = $false
 }
 if (-not (Test-Path -LiteralPath $newInternal)) {
-  Fail-And-Exit "Extracted package missing _internal folder."
+  Write-UpdaterLog "Extracted structure validation FAIL: missing _internal folder"
+  $structOk = $false
 }
+if (-not $structOk) {
+  Fail-And-Exit "Extracted package missing required files (CaseCreator.exe or _internal)."
+}
+Write-UpdaterLog "Extracted structure validation OK"
 
 $installRoot = [string]$job.install_root
 $backupRoot = $installRoot + ".backup-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+Write-UpdaterLog ("Install root: " + $installRoot)
+Write-UpdaterLog ("Backup path (if replace proceeds): " + $backupRoot)
 
 if (Test-Path -LiteralPath $installRoot) {
   try {
+    Write-UpdaterLog ("Moving existing install to backup: " + $backupRoot)
     Move-Item -LiteralPath $installRoot -Destination $backupRoot
+    Write-UpdaterLog "Backup move success"
   } catch {
+    Write-UpdaterLog ("Backup move failure: " + $_.Exception.Message)
     Fail-And-Exit ("Failed to move existing install to backup.`n" + $_.Exception.Message)
   }
+} else {
+  Write-UpdaterLog "No existing install folder; fresh install path"
 }
 
 try {
+  Write-UpdaterLog ("Moving extracted app into install root: " + $installRoot)
   Move-Item -LiteralPath $newRoot -Destination $installRoot
+  Write-UpdaterLog "Install folder replacement success"
 } catch {
+  Write-UpdaterLog ("Install folder replacement failure: " + $_.Exception.Message)
   if ((Test-Path -LiteralPath $backupRoot) -and (-not (Test-Path -LiteralPath $installRoot))) {
-    try { Move-Item -LiteralPath $backupRoot -Destination $installRoot } catch { }
+    Write-UpdaterLog "Rollback: restoring backup to install root"
+    try {
+      Move-Item -LiteralPath $backupRoot -Destination $installRoot
+      Write-UpdaterLog "Rollback success (install restored from backup)"
+    } catch {
+      Write-UpdaterLog ("Rollback failed: " + $_.Exception.Message)
+    }
+  } else {
+    Write-UpdaterLog "Rollback not attempted (backup or install state unexpected)"
   }
   Fail-And-Exit ("Failed to replace install folder.`n" + $_.Exception.Message)
 }
 
 $launchExe = Join-Path $installRoot "CaseCreator.exe"
 if (-not (Test-Path -LiteralPath $launchExe)) {
+  Write-UpdaterLog "Post-replace validation FAIL: CaseCreator.exe missing"
   if ((Test-Path -LiteralPath $backupRoot) -and (-not (Test-Path -LiteralPath $installRoot))) {
-    try { Move-Item -LiteralPath $backupRoot -Destination $installRoot } catch { }
+    Write-UpdaterLog "Rollback: restoring backup after missing exe"
+    try {
+      Move-Item -LiteralPath $backupRoot -Destination $installRoot
+      Write-UpdaterLog "Rollback success after missing exe"
+    } catch {
+      Write-UpdaterLog ("Rollback failed: " + $_.Exception.Message)
+    }
   }
   Fail-And-Exit "Updated install is missing CaseCreator.exe after replacement."
 }
 
+Write-UpdaterLog ("Relaunch attempt: " + $launchExe)
 try {
   Start-Process -FilePath $launchExe | Out-Null
+  Write-UpdaterLog "Relaunch Start-Process succeeded"
 } catch {
+  Write-UpdaterLog ("Relaunch failure: " + $_.Exception.Message)
   if ((Test-Path -LiteralPath $backupRoot) -and (Test-Path -LiteralPath $installRoot)) {
+    Write-UpdaterLog "Rollback: removing failed install and restoring backup"
     try {
       Remove-Item -LiteralPath $installRoot -Recurse -Force
       Move-Item -LiteralPath $backupRoot -Destination $installRoot
-    } catch { }
+      Write-UpdaterLog "Rollback success after relaunch failure"
+    } catch {
+      Write-UpdaterLog ("Rollback failed: " + $_.Exception.Message)
+    }
   }
   Fail-And-Exit ("Update installed but failed to relaunch Case Creator.`n" + $_.Exception.Message)
 }
 
+Write-UpdaterLog "FINAL: success"
+Write-Step "Update finished successfully. Log: $logFile"
 Show-Message "Update installed successfully. Relaunching Case Creator."
+Start-Sleep -Seconds 2
 exit 0
 """
 
 
-def launch_external_updater(result: UpdateCheckResult, current_version: str) -> None:
+def launch_external_updater(result: UpdateCheckResult, current_version: str) -> subprocess.Popen:
     if os.name != "nt":
         raise RuntimeError("Updater is currently supported on Windows only.")
     if not result.zip_asset_url:
@@ -358,6 +462,7 @@ def launch_external_updater(result: UpdateCheckResult, current_version: str) -> 
     script_path = os.path.join(runner_dir, "case_creator_updater.ps1")
 
     install_root = get_install_root_path()
+    intended_release = result.latest_tag or result.latest_version or ""
     payload = {
         "current_version": current_version,
         "latest_tag": result.latest_tag or "",
@@ -373,27 +478,40 @@ def launch_external_updater(result: UpdateCheckResult, current_version: str) -> 
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(_build_updater_powershell_script())
 
+    append_updater_client_log(
+        "Launching external updater | "
+        f"script={script_path} | job={job_path} | install_root={install_root} | "
+        f"intended_release={intended_release!r} | current_version={current_version!r} | "
+        f"pid={os.getpid()}"
+    )
+
     creationflags = 0
     if os.name == "nt":
-        creationflags = (
-            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-            | getattr(subprocess, "DETACHED_PROCESS", 0)
-        )
+        # Visible console window so operators can see progress during this debugging phase.
+        creationflags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 
-    subprocess.Popen(
-        [
-            "powershell",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            script_path,
-            "-JobPath",
-            job_path,
-        ],
-        creationflags=creationflags,
-        close_fds=True,
-    )
+    try:
+        proc = subprocess.Popen(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-NoLogo",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_path,
+                "-JobPath",
+                job_path,
+            ],
+            creationflags=creationflags,
+            close_fds=True,
+        )
+    except OSError as exc:
+        append_updater_client_log(f"ERROR: subprocess.Popen failed: {exc!r}")
+        raise
+
+    append_updater_client_log(f"Updater process started (child pid={proc.pid})")
+    return proc
 
 
 class SettingsDialog(QDialog):
@@ -683,9 +801,25 @@ class UpdateCheckDialog(QDialog):
         if confirmation != QMessageBox.StandardButton.Yes:
             return
         try:
-            launch_external_updater(self._result, self._current_version)
+            proc = launch_external_updater(self._result, self._current_version)
         except Exception as exc:
+            append_updater_client_log(f"ERROR: launch_external_updater raised: {exc!r}")
             QMessageBox.warning(self, "Updater Error", f"Could not start updater.\n{exc}")
+            return
+
+        time.sleep(0.85)
+        early = proc.poll()
+        if early is not None:
+            log_path = get_updater_log_path()
+            append_updater_client_log(
+                f"ERROR: updater PowerShell exited immediately with code {early}"
+            )
+            QMessageBox.warning(
+                self,
+                "Updater Error",
+                "The updater process exited immediately (often a script error or blocked PowerShell).\n\n"
+                f"Exit code: {early}\nLog file:\n{log_path}",
+            )
             return
 
         QMessageBox.information(
