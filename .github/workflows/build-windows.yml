@@ -12,6 +12,9 @@ concurrency:
   group: build-windows-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -90,9 +93,28 @@ jobs:
           Compress-Archive -Path "dist\CaseCreator" -DestinationPath $zip
           Get-Item $zip | Format-List FullName, Length
 
+      - name: Generate SHA256 checksum (tag builds)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          $zip = Join-Path $PWD $env:ZIP_NAME
+          $hash = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower()
+          $line = "$hash  $env:ZIP_NAME"
+          $shaPath = "$zip.sha256"
+          $line | Out-File -FilePath $shaPath -Encoding ascii
+          Get-Item $shaPath | Format-List FullName, Length
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v6
         with:
           name: CaseCreator-win64
           path: ${{ env.ZIP_NAME }}
           if-no-files-found: error
+
+      - name: Upload release assets (tag builds)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.ZIP_NAME }}
+            ${{ env.ZIP_NAME }}.sha256
+          fail_on_unmatched_files: true
