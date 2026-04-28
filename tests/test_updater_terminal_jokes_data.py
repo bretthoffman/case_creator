@@ -1,6 +1,10 @@
 import unittest
 
-from pyside6_ui import UPDATER_DENTAL_JOKES_QA, _build_updater_powershell_script
+from pyside6_ui import (
+    UPDATER_DENTAL_JOKES_QA,
+    _build_updater_powershell_script,
+    updater_job_jokes_for_payload,
+)
 
 
 class UpdaterTerminalJokesDataTests(unittest.TestCase):
@@ -24,6 +28,16 @@ class UpdaterTerminalJokesDataTests(unittest.TestCase):
             script,
         )
         self.assertIn("IMMEDIATE: Case Creator updater script entry", script)
+        self.assertNotIn("[pscustomobject]@", script)
+        self.assertNotIn("$script:DentalJokes", script)
+        self.assertIn("$job.jokes", script)
+
+    def test_job_payload_jokes_round_trip_shape(self):
+        jokes = updater_job_jokes_for_payload()
+        self.assertEqual(len(jokes), 40)
+        self.assertEqual(jokes[0]["q"], UPDATER_DENTAL_JOKES_QA[0][0])
+        self.assertEqual(jokes[0]["a"], UPDATER_DENTAL_JOKES_QA[0][1])
+        self.assertEqual(jokes[-1]["q"], UPDATER_DENTAL_JOKES_QA[-1][0])
 
 
 if __name__ == "__main__":

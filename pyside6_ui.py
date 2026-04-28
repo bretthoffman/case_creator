@@ -6,7 +6,7 @@ import sys
 import tempfile
 import time
 from collections import deque
-from typing import Tuple
+from typing import Dict, List, Tuple
 
 from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
@@ -240,11 +240,6 @@ def append_updater_client_log(message: str) -> None:
         pass
 
 
-def _ps_single_quoted_literal(text: str) -> str:
-    """PowerShell single-quoted string content (escape ' as '')."""
-    return text.replace("'", "''")
-
-
 UPDATER_DENTAL_JOKES_QA: Tuple[Tuple[str, str], ...] = (
     (
         "Why did the tooth refuse to apologize?",
@@ -409,18 +404,12 @@ UPDATER_DENTAL_JOKES_QA: Tuple[Tuple[str, str], ...] = (
 )
 
 
-def _powershell_dental_jokes_array_literal() -> str:
-    lines = ["$script:DentalJokes = @("]
-    for q, a in UPDATER_DENTAL_JOKES_QA:
-        qe = _ps_single_quoted_literal(q)
-        ae = _ps_single_quoted_literal(a)
-        lines.append(f"  [pscustomobject]@{{ Q = '{qe}'; A = '{ae}' }},")
-    lines.append(")")
-    return "\n".join(lines)
+def updater_job_jokes_for_payload() -> List[Dict[str, str]]:
+    """Structured jokes for the updater job JSON (PowerShell reads via ConvertFrom-Json)."""
+    return [{"q": q, "a": a} for q, a in UPDATER_DENTAL_JOKES_QA]
 
 
 def _build_updater_powershell_script() -> str:
-    dental_block = _powershell_dental_jokes_array_literal()
     return (
         r"""
 param(
@@ -467,6 +456,18 @@ try {
   exit 3
 }
 
+if ($null -eq $job.jokes) {
+  Write-UpdaterLog "FATAL: Job JSON missing jokes array"
+  Write-Host "ERROR: Update job is missing jokes data (expected jokes from client)." -ForegroundColor Red
+  exit 4
+}
+$jokeProbe = @($job.jokes)
+if ($jokeProbe.Length -lt 1) {
+  Write-UpdaterLog "FATAL: Job jokes array is empty"
+  Write-Host "ERROR: Update job jokes list is empty." -ForegroundColor Red
+  exit 4
+}
+
 $ProgressPreference = "SilentlyContinue"
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms | Out-Null
@@ -474,10 +475,6 @@ try { Add-Type -AssemblyName System.Net.Http } catch { }
 
 $script:JokeSync = $null
 $script:JokeState = $null
-
-"""
-        + dental_block
-        + r"""
 
 function Write-Step([string]$line) {
   Write-Host $line
@@ -696,7 +693,7 @@ if ([string]::IsNullOrWhiteSpace($zipName)) {
 }
 $zipPath = Join-Path $downloadDir $zipName
 
-$deckForJokes = [object[]]@($script:DentalJokes)
+$deckForJokes = @($job.jokes)
 for ($si = $deckForJokes.Length - 1; $si -gt 0; $si--) {
   $sj = Get-Random -Minimum 0 -Maximum ($si + 1)
   $t = $deckForJokes[$si]
@@ -897,6 +894,7 @@ def launch_external_updater(result: UpdateCheckResult, current_version: str) -> 
         "checksum_asset_url": result.checksum_asset_url or "",
         "install_root": install_root,
         "current_pid": os.getpid(),
+        "jokes": updater_job_jokes_for_payload(),
     }
     with open(job_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=True)
