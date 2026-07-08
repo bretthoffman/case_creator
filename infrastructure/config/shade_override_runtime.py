@@ -29,10 +29,12 @@ def clear_shade_override_cache():
 
 def resolve_non_argen_shade_markers(default_markers: Iterable[str]) -> Tuple[str, ...]:
     """
-    Live in this pass:
-    - shade_overrides.non_argen_shade_markers only.
+    Live source of the shade-based designer exclusions.
 
-    Any error/missing/invalid path falls back to provided defaults.
+    Reads ``shade_overrides.non_outsource_shades`` from the validated effective config (the
+    validator normalizes the legacy ``non_argen_shade_markers`` alias to this key). The function
+    name is retained for call-site stability. Any error/missing/invalid path falls back to the
+    provided defaults.
     """
     defaults = _normalize_markers(default_markers)
     try:
@@ -40,7 +42,7 @@ def resolve_non_argen_shade_markers(default_markers: Iterable[str]) -> Tuple[str
         cfg = (preview.effective_config or {}).get("shade_overrides") or {}
         if not cfg.get("enabled", True):
             return defaults
-        markers = cfg.get("non_argen_shade_markers")
+        markers = cfg.get("non_outsource_shades")
         if not isinstance(markers, list):
             return defaults
         resolved = _normalize_markers(markers)

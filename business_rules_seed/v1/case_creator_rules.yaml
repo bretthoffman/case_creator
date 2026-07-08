@@ -3,174 +3,30 @@
 # =============================================================================
 # SAVE THIS FILE AND RESTART THE APP for changes to take effect.
 # =============================================================================
+#
+# DELIVERY MODEL (how cases are shipped):
+#   - OUTSOURCE is the DEFAULT for every case  -> Send to AI, delivered ZIPPED.
+#   - DESIGNER is the EXCEPTION                 -> Send to 1.9, delivered UNZIPPED.
+#   A case is DESIGNER only when a YAML disqualifier matches:
+#     - shade    in shade_overrides.non_outsource_shades           (near the bottom)
+#     - doctor name in delivery_modes.designer_doctor_names        (bottom of file)
+#   has_study does NOT decide outsource vs designer.
+# =============================================================================
 
 unified_version: 1
+# NOTE: doctor_overrides no longer controls outsource-vs-designer delivery. It only influences
+# advanced TEMPLATE selection (and is off by default). To send a doctor's cases to the designer,
+# add the name to delivery_modes.designer_doctor_names at the bottom of this file.
 doctor_overrides:
   version: 1
   enabled: true
-  rules:
-  - id: abby_dew_multi_outcome
-    enabled: true
-    match:
-      predicate: abby_dew
-    when:
-      all:
-      - field: has_study
-        eq: false
-      - field: signature
-        eq: false
-      - field: is_anterior
-        eq: false
-      - excludes_modeless_hint_route: true
-    outcomes:
-    - when:
-        all:
-        - material_is_adz: true
-        - field: shade_usable
-          eq: false
-        - scanner_is_itero: true
-      action:
-        template_override_key: ai_adzir
-    - when:
-        all:
-        - material_is_adz: false
-        - field: shade_usable
-          eq: false
-        - scanner_is_itero: true
-      action:
-        template_override_key: ai_envision
-    - when:
-        all:
-        - material_is_adz: true
-        - field: shade_usable
-          eq: false
-        - scanner_is_itero: false
-      action:
-        template_override_key: ai_adzir_model
-    - when:
-        all:
-        - material_is_adz: false
-        - field: shade_usable
-          eq: false
-        - scanner_is_itero: false
-      action:
-        template_override_key: ai_envision_model
-    - when:
-        all:
-        - material_is_adz: true
-        - field: shade_usable
-          eq: true
-        - scanner_is_itero: true
-        - non_argen_shade: false
-      action:
-        template_override_key: ai_adzir
-    - when:
-        all:
-        - material_is_adz: false
-        - field: shade_usable
-          eq: true
-        - scanner_is_itero: true
-        - non_argen_shade: false
-      action:
-        template_override_key: ai_envision
-    - when:
-        all:
-        - material_is_adz: true
-        - field: shade_usable
-          eq: true
-        - scanner_is_itero: true
-        - non_argen_shade: true
-      action:
-        template_override_key: ai_adzir
-    - when:
-        all:
-        - material_is_adz: false
-        - field: shade_usable
-          eq: true
-        - scanner_is_itero: true
-        - non_argen_shade: true
-      action:
-        template_override_key: ai_envision
-    - when:
-        all:
-        - material_is_adz: true
-        - field: shade_usable
-          eq: true
-        - scanner_is_itero: false
-        - non_argen_shade: false
-      action:
-        template_override_key: ai_adzir
-    - when:
-        all:
-        - material_is_adz: false
-        - field: shade_usable
-          eq: true
-        - scanner_is_itero: false
-        - non_argen_shade: false
-      action:
-        template_override_key: ai_envision
-  - id: vd_brier_creek_multi_outcome
-    enabled: true
-    match:
-      predicate: vd_brier_creek
-    when:
-      all:
-      - field: has_study
-        eq: false
-      - field: signature
-        eq: false
-      - field: is_anterior
-        eq: false
-      - excludes_modeless_hint_route: true
-    outcomes:
-    - when:
-        all:
-        - material_is_adz: true
-        - field: shade_usable
-          eq: true
-        - scanner_is_itero: true
-        - non_argen_shade: true
-      action:
-        template_override_key: ai_adzir
-    - when:
-        all:
-        - material_is_adz: false
-        - field: shade_usable
-          eq: true
-        - scanner_is_itero: true
-        - non_argen_shade: true
-      action:
-        template_override_key: ai_envision
-    - when:
-        all:
-        - material_is_adz: true
-        - scanner_is_itero: false
-      action:
-        template_override_key: ai_adzir_model
-    - when:
-        all:
-        - material_is_adz: false
-        - scanner_is_itero: false
-      action:
-        template_override_key: ai_envision_model
-  - id: example_single_key_doctor
-    enabled: false
-    match:
-      contains_all:
-      - sample
-      - doctor
-    action:
-      template_override_key: ai_envision
-shade_overrides:
-  version: 1
-  enabled: true
-  non_argen_shade_markers:
-  - C3
-  - A4
   rules: []
 routing_overrides:
   version: 1
   enabled: true
+  # LEGACY / dormant: old template-family -> destination mapping. It does NOT affect delivery
+  # (outsource vs designer); delivery is decided by shade_overrides + delivery_modes. Kept for
+  # compatibility only. Safe to leave as-is.
   template_family_route_overrides:
   - family_key: argen
     destination_key: argen
@@ -183,5 +39,33 @@ routing_overrides:
 argen_modes:
   version: 1
   enabled: true
+  # LEGACY / dormant: Argen contact-model settings. These only affect the two argen_modeless_*
+  # TEMPLATES, never delivery. Argen is no longer the active delivery path. Leave off.
   contact_model_mode: 'off'
   contact_model_design_field: 3Shape Automate
+# --- Designer exclusions (the only things that send a case to the designer) ---
+shade_overrides:
+  version: 1
+  enabled: true
+  # Shades that send a case to the DESIGNER (Send to 1.9, unzipped). Everything else is outsource.
+  # Enter as a comma-separated line OR a YAML list; spaces around commas are ignored.
+  #   Example:  C3
+  #   Multiple: C3, A4, A3.5
+  # Comma line:  non_outsource_shades: C3, A4, A3.5
+  # NOTE: the shipped defaults C3 and A4 are ACTIVE — cases with those shades go to the designer.
+  # Remove them (non_outsource_shades: []) if those shades should stay outsource.
+  non_outsource_shades:
+  - C3
+  - A4
+  rules: []
+delivery_modes:
+  version: 1
+  enabled: true
+  # LIVE: doctors whose cases go to the DESIGNER (Send to 1.9, unzipped) instead of the default
+  # OUTSOURCE (Send to AI, zipped). Case-insensitive substring match; empty = everyone outsource.
+  # Enter as a comma-separated line OR a YAML list; spaces around commas are ignored.
+  #   Example:  Jane Doe
+  #   Multiple: Jane Doe, John Smith, Pat Lee
+  # Comma line:  designer_doctor_names: Jane Doe, John Smith, Pat Lee
+  # Shade-based designer exclusion is handled by shade_overrides.non_outsource_shades above.
+  designer_doctor_names: []

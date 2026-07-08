@@ -3,13 +3,20 @@ from typing import Any, Dict, List
 from domain.rules import routing_rules
 from infrastructure.config.business_rule_models import ValidationResult
 
-SUPPORTED_FAMILIES = ("doctor_overrides", "shade_overrides", "routing_overrides", "argen_modes")
+SUPPORTED_FAMILIES = (
+    "doctor_overrides",
+    "shade_overrides",
+    "routing_overrides",
+    "argen_modes",
+    "delivery_modes",
+)
 FAMILY_FILE_CANDIDATES = {
     # YAML is preferred editable source-of-truth, JSON remains fallback-compatible.
     "doctor_overrides": ("doctor_overrides.yaml", "doctor_overrides.yml", "doctor_overrides.json"),
     "shade_overrides": ("shade_overrides.yaml", "shade_overrides.yml", "shade_overrides.json"),
     "routing_overrides": ("routing_overrides.yaml", "routing_overrides.yml", "routing_overrides.json"),
     "argen_modes": ("argen_modes.yaml", "argen_modes.yml", "argen_modes.json"),
+    "delivery_modes": ("delivery_modes.yaml", "delivery_modes.yml", "delivery_modes.json"),
 }
 SCHEMA_VERSION = 1
 
@@ -161,7 +168,7 @@ def default_shade_overrides() -> Dict[str, Any]:
     return {
         "version": SCHEMA_VERSION,
         "enabled": True,
-        "non_argen_shade_markers": ["C3", "A4"],
+        "non_outsource_shades": ["C3", "A4"],
         "rules": [],
     }
 
@@ -184,10 +191,33 @@ def default_argen_modes() -> Dict[str, Any]:
     }
 
 
+def default_delivery_modes() -> Dict[str, Any]:
+    # Dormant in this pass: not yet consumed by process_case. Empty designer_doctor_names
+    # means "no doctor forces designer mode"; outsource remains the default for all cases.
+    return {
+        "version": SCHEMA_VERSION,
+        "enabled": True,
+        "designer_doctor_names": [],
+    }
+
+
 def _require_dict(data: Any, label: str) -> List[str]:
     if isinstance(data, dict):
         return []
     return [f"{label} must be an object."]
+
+
+def _coerce_str_list(value: Any) -> Any:
+    """
+    Accept beginner-friendly comma-separated entry in addition to a YAML list.
+
+    A single string is split on commas, each item trimmed, and empty items dropped
+    (e.g. ``"C3, A4 , , A3.5"`` -> ``["C3", "A4", "A3.5"]``). A list is returned unchanged.
+    Any other type is returned unchanged so the caller's validation can reject it.
+    """
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return value
 
 
 def _validate_header(data: Dict[str, Any]) -> ValidationResult:
@@ -372,9 +402,29 @@ def validate_shade_overrides(data: Any) -> ValidationResult:
     errors.extend(header.errors)
     warnings: List[str] = list(header.warnings)
 
-    markers = data.get("non_argen_shade_markers", [])
+    # Field name: prefer non_outsource_shades; accept legacy non_argen_shade_markers as an alias.
+    # Precedence: if both are present, the new name wins and the legacy one is ignored (with a warning).
+    if "non_outsource_shades" in data:
+        raw_shades = data.get("non_outsource_shades")
+        if "non_argen_shade_markers" in data:
+            warnings.append(
+                "Both non_outsource_shades and legacy non_argen_shade_markers are present; "
+                "using non_outsource_shades and ignoring the legacy field."
+            )
+    elif "non_argen_shade_markers" in data:
+        raw_shades = data.get("non_argen_shade_markers")
+        warnings.append(
+            "non_argen_shade_markers is a legacy alias; rename it to non_outsource_shades."
+        )
+    else:
+        raw_shades = []
+    # Accept a comma-separated string (e.g. "C3, A4, A3.5") or a YAML list.
+    markers = _coerce_str_list(raw_shades)
     if not isinstance(markers, list) or not all(isinstance(x, str) and x.strip() for x in markers):
-        errors.append("non_argen_shade_markers must be a list of non-empty strings.")
+        errors.append(
+            "non_outsource_shades must be a list of non-empty strings "
+            "or a comma-separated string."
+        )
 
     rules = data.get("rules", [])
     if not isinstance(rules, list):
@@ -443,7 +493,11 @@ def validate_shade_overrides(data: Any) -> ValidationResult:
     normalized = {
         "version": SCHEMA_VERSION,
         "enabled": bool(data.get("enabled", True)),
-        "non_argen_shade_markers": [x.strip() for x in markers] if isinstance(markers, list) else [],
+        "non_outsource_shades": (
+            [x.strip() for x in markers if isinstance(x, str) and x.strip()]
+            if isinstance(markers, list)
+            else []
+        ),
         "rules": normalized_rules,
     }
     return ValidationResult(valid=not errors, normalized=normalized, errors=errors, warnings=warnings)
@@ -547,6 +601,45 @@ def validate_argen_modes(data: Any) -> ValidationResult:
     return ValidationResult(valid=not errors, normalized=normalized, errors=errors, warnings=warnings)
 
 
+def validate_delivery_modes(data: Any) -> ValidationResult:
+    """
+    Validate the bounded ``delivery_modes`` family.
+
+    Live field (dormant until the next pass wires it into process_case):
+    - ``designer_doctor_names``: list of non-empty doctor-name substrings. In the future live
+      pass, a case whose doctor name contains any of these is forced into designer mode instead
+      of the default outsource mode. Matching is case-insensitive substring (repo convention).
+
+    Shade-based designer disqualification intentionally reuses the existing
+    ``shade_overrides.non_outsource_shades`` behavior and is NOT duplicated here.
+    """
+    errors = _require_dict(data, "delivery_modes")
+    if errors:
+        return ValidationResult(valid=False, errors=errors)
+    header = _validate_header(data)
+    errors.extend(header.errors)
+    warnings: List[str] = list(header.warnings)
+
+    # Accept a comma-separated string (e.g. "Jane Doe, John Smith") or a YAML list.
+    names = _coerce_str_list(data.get("designer_doctor_names", []))
+    if not isinstance(names, list) or not all(isinstance(x, str) and x.strip() for x in names):
+        errors.append(
+            "designer_doctor_names must be a list of non-empty strings "
+            "or a comma-separated string."
+        )
+
+    normalized = {
+        "version": SCHEMA_VERSION,
+        "enabled": bool(data.get("enabled", True)),
+        "designer_doctor_names": (
+            [x.strip() for x in names if isinstance(x, str) and x.strip()]
+            if isinstance(names, list)
+            else []
+        ),
+    }
+    return ValidationResult(valid=not errors, normalized=normalized, errors=errors, warnings=warnings)
+
+
 def validate_unified_business_rules_config(data: Any) -> ValidationResult:
     """
     Validate the unified Case Creator business-rules YAML/JSON document (envelope + families).
@@ -608,12 +701,14 @@ def validate_unified_business_rules_config(data: Any) -> ValidationResult:
         "shade_overrides": validate_shade_overrides,
         "routing_overrides": validate_routing_overrides,
         "argen_modes": validate_argen_modes,
+        "delivery_modes": validate_delivery_modes,
     }
     effective: Dict[str, Dict[str, Any]] = {
         "doctor_overrides": default_doctor_overrides(),
         "shade_overrides": default_shade_overrides(),
         "routing_overrides": default_routing_overrides(),
         "argen_modes": default_argen_modes(),
+        "delivery_modes": default_delivery_modes(),
     }
 
     for family in SUPPORTED_FAMILIES:

@@ -29,19 +29,21 @@ FIXTURE = _REPO_ROOT / "tests" / "fixtures" / "unified_business_rules_baseline.y
 
 
 def _schema_defaults_effective() -> dict:
-    return {
-        "doctor_overrides": schemas.default_doctor_overrides(),
-        "shade_overrides": schemas.default_shade_overrides(),
-        "routing_overrides": schemas.default_routing_overrides(),
-        "argen_modes": schemas.default_argen_modes(),
-    }
+    # Mirror the loader's default set; derive from SUPPORTED_FAMILIES so new families are covered.
+    return {fam: getattr(schemas, f"default_{fam}")() for fam in schemas.SUPPORTED_FAMILIES}
 
 
 def _archived_split_merged_document() -> dict:
     doc: dict = {"unified_version": 1}
     for fam in schemas.SUPPORTED_FAMILIES:
         p = ARCHIVE / f"{fam}.yaml"
-        doc[fam] = yaml.safe_load(p.read_text(encoding="utf-8"))
+        # Families added after the split archive was frozen (e.g. delivery_modes) have no
+        # archived file; omit them so the unified validator fills them with defaults.
+        if p.is_file():
+            doc[fam] = yaml.safe_load(p.read_text(encoding="utf-8"))
+    # doctor_overrides was intentionally cleared to empty in the current business model; the frozen
+    # split archive predates that, so use the current default to match the shipped canonical file.
+    doc["doctor_overrides"] = schemas.default_doctor_overrides()
     return doc
 
 
@@ -292,7 +294,7 @@ class TestBusinessRuleLoaderUnifiedOnly(unittest.TestCase):
             self.assertEqual(before, after)
             self.assertEqual(preview.rules_load_source, "unified")
             self.assertEqual(
-                preview.effective_config["shade_overrides"]["non_argen_shade_markers"],
+                preview.effective_config["shade_overrides"]["non_outsource_shades"],
                 ["ZZ"],
             )
 

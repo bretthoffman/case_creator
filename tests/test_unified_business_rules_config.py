@@ -93,8 +93,15 @@ class TestUnifiedBusinessRulesConfig(unittest.TestCase):
         merged: dict = {"unified_version": 1}
         for family in schemas.SUPPORTED_FAMILIES:
             path = SPLIT_ARCHIVE / f"{family}.yaml"
+            # Families added after the split archive was frozen (e.g. delivery_modes) have no
+            # archived file; omit them so the unified validator fills them with defaults.
+            if not path.is_file():
+                continue
             with path.open("r", encoding="utf-8") as f:
                 merged[family] = yaml.safe_load(f)
+        # doctor_overrides was intentionally cleared to empty in the current business model; the
+        # frozen split archive predates that, so use the current default to match the canonical file.
+        merged["doctor_overrides"] = schemas.default_doctor_overrides()
         result = schemas.validate_unified_business_rules_config(merged)
         self.assertTrue(result.valid, result.errors)
         preview = loader.load_business_rule_config_preview(

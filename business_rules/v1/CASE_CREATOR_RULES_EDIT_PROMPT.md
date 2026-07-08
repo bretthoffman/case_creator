@@ -65,11 +65,11 @@ WHAT THIS FILE IS
 This YAML file is the single editable business-rules surface for Case Creator.
 
 It controls only approved business-rule behavior such as:
-- doctor-based template rules
-- doctor-based route label/readback rules
+- delivery mode: which doctors (delivery_modes.designer_doctor_names) and which shades
+  (shade_overrides.non_outsource_shades) go to the designer instead of outsource
+- doctor-based template rules (advanced; template selection only)
 - shade override markers
-- routing overrides
-- Argen contact-model mode
+- legacy routing overrides and Argen contact-model mode (compatibility only)
 
 It does NOT control:
 - filesystem paths
@@ -95,6 +95,7 @@ The YAML file must remain a single document with these allowed top-level keys on
 - shade_overrides
 - routing_overrides
 - argen_modes
+- delivery_modes
 
 Top-level rules:
 
@@ -111,14 +112,6 @@ doctor_overrides:
   enabled: true
   rules: []
 
-shade_overrides:
-  version: 1
-  enabled: true
-  non_argen_shade_markers:
-    - C3
-    - A4
-  rules: []
-
 routing_overrides:
   version: 1
   enabled: true
@@ -129,6 +122,19 @@ argen_modes:
   enabled: true
   contact_model_mode: "off"
   contact_model_design_field: "3Shape Automate"
+
+shade_overrides:
+  version: 1
+  enabled: true
+  non_outsource_shades:
+    - C3
+    - A4
+  rules: []
+
+delivery_modes:
+  version: 1
+  enabled: true
+  designer_doctor_names: []
 
 ================================================================================
 GENERAL YAML EDITING RULES
@@ -234,51 +240,39 @@ Examples:
   -> treat "multi layer" as Envision-side logic
 
 ================================================================================
-DESTINATION VS LABEL REFERENCE
+DELIVERY MODEL (outsource vs designer)
 ================================================================================
 
-You must understand the difference between ACTUAL DESTINATION and DISPLAY LABEL / READBACK.
+Every case is delivered as either OUTSOURCE (the default) or DESIGNER (the exception).
 
-1. destination_key
-   This is the real logical destination.
-   Supported values in the current editable surface are:
-   - argen
-   - "1_9"
+- OUTSOURCE (default, all cases) -> Send to AI, delivered ZIPPED.
+- DESIGNER (exception only)       -> Send to 1.9, delivered UNZIPPED.
 
-2. route_label_override_key
-   This is a UI/log/readback label.
-   It does NOT necessarily change the real destination.
+A case is DESIGNER only when a YAML disqualifier matches:
+1. the doctor name is listed in delivery_modes.designer_doctor_names, OR
+2. the shade matches a marker in shade_overrides.non_outsource_shades.
 
-Important:
-- "Send to Serbia" in Case Creator usually means the readback label says Serbia while the actual destination may still be "1_9".
-- Do NOT assume "Serbia" is a real filesystem path or destination key.
-- If the user asks to "send to Serbia", you must decide whether they mean:
-  A. change the actual destination
-  B. change only the route/readback label
-  C. both
-- If that is ambiguous, ask a clarifying question.
+Otherwise the case is OUTSOURCE. has_study does NOT affect delivery mode.
 
-Supported route label override keys:
-- argen
-- designer
-- serbia
-- ai_designer
-- ai_serbia
+To change where cases go:
+- To send a doctor's cases to the designer -> add the name to delivery_modes.designer_doctor_names.
+- To send a shade to the designer          -> add the marker to shade_overrides.non_outsource_shades.
 
-Do not invent new route label values.
-
-Examples:
-- "Show Send to Serbia but still route to 1.9"
-  -> keep destination at "1_9" and use route_label_override_key: serbia where the schema supports it
-- "Actually send the AI family to argen"
-  -> this is a destination change, not just a label change
+Retired concepts (do NOT use as live behavior, and do NOT introduce them):
+- "Send to Serbia" is no longer a live concept.
+- Abby Dew / VD Brier Creek special delivery routing is no longer live delivery behavior.
+- route_label_override_key no longer changes delivery. Do not add it for delivery purposes; if a
+  user asks for "Serbia" or a readback label, explain that delivery is now only outsource/designer
+  and driven by delivery_modes + shade markers.
 
 ================================================================================
 SECTION: doctor_overrides
 ================================================================================
 
 Purpose:
-Controls doctor-name-based template override rules and bounded doctor-based route label/readback override rules.
+Controls doctor-name-based TEMPLATE override rules only (which template file a doctor's cases use).
+This section does NOT control delivery (outsource vs designer). To route a doctor to the designer,
+use delivery_modes.designer_doctor_names.
 
 Shape:
 
@@ -312,9 +306,9 @@ There are two kinds of doctor rules:
    These use:
    - match
    - optional when
-   - action.template_override_key and/or action.route_label_override_key where supported by the current file schema
+   - action.template_override_key
 
-   Use these when one doctor should always go to one template or always use one supported readback label.
+   Use these when one doctor should always use one specific template file.
 
 2. RICHER MULTI-OUTCOME RULES
    These use:
@@ -325,10 +319,11 @@ There are two kinds of doctor rules:
    Use these when the doctor needs different templates depending on material, scanner, shade, etc.
 
 Important:
-- richer outcomes rules are intended for advanced controlled behavior
-- do not casually rewrite existing Abby or VD rules unless the user explicitly asks
-- keep their condition structure intact unless the requested change truly requires it
-- if the file already contains advanced multi-outcome rules, new multi-outcome rules may be added in the same style when the user explicitly asks for them
+- This section is EMPTY by default (rules: []) and is rarely needed. Only add a rule here if the
+  user explicitly asks to force a specific TEMPLATE for a doctor. It never changes delivery.
+- richer outcomes rules are intended for advanced, controlled template behavior
+- if the file already contains advanced multi-outcome rules, keep their structure intact unless the
+  user explicitly asks to change them
 
 --------------------------------------------------------------------------------
 doctor_overrides rule ids and new rules
@@ -345,10 +340,11 @@ Important:
 - Prefer short, descriptive snake_case ids such as:
   - jane_doe_simple
   - bill_stanza_multi_outcome
-  - shade_b3_serbia_label
+  - dr_lee_envision_template
 
-Use a SIMPLE rule when one doctor or one straightforward case grouping should always go to one template or one supported readback label.
-Use a RICHER MULTI-OUTCOME rule only when the behavior truly depends on material, scanner, shade, or similar supported fields.
+Use a SIMPLE rule when one doctor should always use one specific template file.
+Use a RICHER MULTI-OUTCOME rule only when the template choice truly depends on material, scanner,
+shade, or similar supported fields.
 
 --------------------------------------------------------------------------------
 doctor_overrides.match
@@ -359,7 +355,7 @@ Allowed forms:
 A. contains_all
 Example:
 match:
-  contains_all: ["abby", "dew"]
+  contains_all: ["jane", "doe"]
 
 B. contains_any
 Example:
@@ -367,12 +363,10 @@ match:
   contains_any: ["smith", "smyth"]
 
 C. predicate
-Allowed predicate values:
-- abby_dew
-- vd_brier_creek
-
-A rule may use predicate alone, or predicate plus contains_any/contains_all if already present.
-Do not invent new predicate names.
+The schema still accepts two LEGACY predicate values (abby_dew, vd_brier_creek), but they are
+retired from the current business model. Do NOT add new rules that use them, and do not use them
+for delivery. Prefer contains_all / contains_any for any new template rule. Do not invent new
+predicate names.
 
 --------------------------------------------------------------------------------
 doctor_overrides.when and outcomes[].when
@@ -424,8 +418,12 @@ doctor_overrides.action
 --------------------------------------------------------------------------------
 
 Allowed action keys for safe use:
-- template_override_key
-- route_label_override_key, but only when the current file schema already supports it in that rule shape and the requested meaning is clearly label/readback behavior rather than real destination routing
+- template_override_key (advanced TEMPLATE selection only; does NOT affect delivery)
+
+Note: doctor_overrides no longer affects delivery (outsource vs designer). To route a doctor to
+the designer, use delivery_modes.designer_doctor_names instead.
+
+route_label_override_key is a legacy/no-effect field: it no longer changes delivery. Do not add it.
 
 Do not invent raw template paths.
 Use only supported template keys.
@@ -449,64 +447,54 @@ Allowed template_override_key values:
 - reg_envision_anterior
 - reg_envision_study
 
-Allowed route_label_override_key values:
-
-- argen
-- designer
-- serbia
-- ai_designer
-- ai_serbia
-
 Rule precedence:
 - doctor rules are checked top to bottom
 - first enabled matching rule wins
 - preserve order unless the user specifically wants precedence changed
 
 Special note:
-Existing Abby Dew and VD Brier Creek rules may already be present as richer multi-outcome rules.
-These are advanced rules. Do not simplify or flatten them unless the user explicitly asks and it can be done safely.
-
-If the user asks for Serbia-style behavior:
-- do not assume that means a destination change
-- use route_label_override_key when they mean the readback label
-- ask a clarifying question if they might mean the actual destination instead
+doctor_overrides is empty by default and affects TEMPLATE selection only. It does NOT control
+delivery (outsource vs designer); delivery is decided only by delivery_modes.designer_doctor_names
+and shade_overrides.non_outsource_shades.
 
 ================================================================================
 SECTION: shade_overrides
 ================================================================================
 
 Purpose:
-Controls the list of shades treated as special non-Argen shade markers.
+Controls which shades send a case to the DESIGNER (Send to 1.9, unzipped) instead of the default
+OUTSOURCE (Send to AI, zipped). The live field is non_outsource_shades.
 
-Shape:
+Entry format:
+Values may be entered as a comma-separated line OR a YAML list. Spaces around commas are ignored,
+and empty entries are dropped.
+- Example:  C3
+- Multiple: C3, A4, A3.5
 
+Comma line:
 shade_overrides:
   version: 1
   enabled: true
-  non_argen_shade_markers:
+  non_outsource_shades: C3, A4, A3.5
+  rules: []
+
+YAML list:
+shade_overrides:
+  version: 1
+  enabled: true
+  non_outsource_shades:
     - C3
     - A4
   rules: []
 
-Currently, the main live field here is:
-- non_argen_shade_markers
-
-Use simple shade code strings like:
-- C3
-- A4
-- A3.5
-- B3
+Use simple shade code strings like C3, A4, A3.5, B3.
 
 Important:
 - if the user asks to add a shade written in a convertible form like 3m2, 3m3, 4m2, bl2, etc., understand the conversion table above first
 - then make the safest YAML edit based on the current file schema and user intent
 
-Do not invent complicated structures here unless already present in the file.
-
-If the user wants to add or remove a shade from the non-Argen list, update only:
-- non_argen_shade_markers
-
-Preserve rules: [] or other existing entries unless the user explicitly asks to change them.
+If the user wants to add or remove a shade, update only non_outsource_shades.
+Preserve rules: [] unless the user explicitly asks to change it.
 
 ================================================================================
 SECTION: routing_overrides
@@ -539,19 +527,16 @@ Allowed destination_key values:
 Do not invent other destination values like raw folder paths.
 Do not invent filesystem locations.
 
-This section changes actual logical routing targets only.
-
 Important:
-- This section is for destination routing, not display label/readback behavior.
-- If the user asks to "send to Serbia" but means the on-screen label, this section is probably NOT the right section.
-- If the user wants actual routing family changes, use this section.
-- If the user wants Serbia-style readback while keeping destination at 1_9, that is a label/readback request, not a routing_overrides destination change.
+- This is a LEGACY/compatibility section. It does NOT decide outsource vs designer delivery.
+- Delivery is decided only by delivery_modes.designer_doctor_names (doctors) and
+  shade_overrides.non_outsource_shades (shades).
+- If the user wants to change where cases are delivered, use delivery_modes or shade_overrides,
+  not this section.
 
-Examples:
-- "Route the AI family to argen"
-  -> routing_overrides change
-- "Show Send to Serbia but still route to 1.9"
-  -> likely doctor rule with route_label_override_key, not routing_overrides
+Example:
+- "Send Dr. Lee's cases to the designer"
+  -> add "Lee" to delivery_modes.designer_doctor_names (NOT a routing_overrides change)
 
 ================================================================================
 SECTION: argen_modes
@@ -596,6 +581,52 @@ For normal editing, the valid live values are only:
 - "on"
 
 ================================================================================
+SECTION: delivery_modes
+================================================================================
+
+Purpose:
+LIVE control of doctor-name-based designer exclusion. This is the source of truth for sending a
+doctor's cases to the designer (Send to 1.9, unzipped) instead of the default outsource (Send to
+AI, zipped).
+
+Entry format:
+Values may be entered as a comma-separated line OR a YAML list. Spaces around commas are ignored,
+and empty entries are dropped.
+- Example:  Jane Doe
+- Multiple: Jane Doe, John Smith, Pat Lee
+
+Comma line:
+delivery_modes:
+  version: 1
+  enabled: true
+  designer_doctor_names: Jane Doe, John Smith, Pat Lee
+
+YAML list:
+delivery_modes:
+  version: 1
+  enabled: true
+  designer_doctor_names:
+    - Jane Doe
+    - John Smith
+
+Meaning:
+- designer_doctor_names is a list of doctor-name substrings (or a comma-separated line of them).
+- A case whose doctor name contains any of these substrings is delivered as DESIGNER
+  (Send to 1.9, unzipped) instead of the default OUTSOURCE (Send to AI, zipped).
+- Matching is case-insensitive substring matching.
+
+Rules:
+- designer_doctor_names must be a comma-separated string or a list of non-empty strings (or []).
+- Keep entries simple doctor-name fragments, e.g. "Jane Doe".
+- Do NOT add shade values here. Shade-based designer exclusion is handled by
+  shade_overrides.non_outsource_shades and must not be duplicated in delivery_modes.
+- Do NOT add other keys to delivery_modes; only designer_doctor_names is supported.
+
+Important:
+- This is the correct place to route a doctor to the designer. Do NOT use doctor_overrides or any
+  "Serbia"/route-label mechanism for delivery — those no longer affect delivery.
+
+================================================================================
 THINGS YOU MUST NEVER INVENT
 ================================================================================
 
@@ -617,7 +648,8 @@ When the user asks for a change, follow this process:
 
 1. Read the full current YAML carefully.
 2. Normalize user wording using the shade/material guidance above.
-3. Distinguish between destination changes and route/readback label changes.
+3. If the request is about delivery (where a case goes / whether it is zipped), it is a
+   delivery_modes (doctors) or shade_overrides (shades) change — never a label change.
 4. Identify which existing section(s) must change.
 5. Make only the requested changes.
 6. Preserve everything else.
@@ -642,7 +674,7 @@ Example 2:
 
 That means:
 - add A3.5 to:
-  shade_overrides.non_argen_shade_markers
+  shade_overrides.non_outsource_shades
 
 Example 3:
 "Make 3m2 a non-Argen shade."
@@ -652,9 +684,12 @@ That means:
 - update the shade section accordingly
 
 Example 4:
-"Add a doctor rule so Dr Jane Doe always goes to ai_envision."
+"Add a doctor rule so Dr Jane Doe always uses the ai_envision TEMPLATE."
 
-That likely means adding a SIMPLE rule under doctor_overrides.rules:
+Note: this is an advanced, template-only request (doctor_overrides is empty by default). It changes
+which template file is used, NOT delivery. If the user actually wants Dr Jane Doe's cases sent to
+the designer, that is delivery_modes.designer_doctor_names instead. For a genuine template request:
+- add a SIMPLE rule under doctor_overrides.rules
 - unique id
 - enabled: true
 - match.contains_all using the doctor name pieces
@@ -668,26 +703,27 @@ That means:
 - then apply that meaning carefully within the allowed schema
 
 Example 6:
-"Route the AI family to argen."
+"Send Dr. Brier Creek's cases to the designer."
 
-That means changing or adding a routing row under:
-- routing_overrides.template_family_route_overrides
-with:
-- family_key: ai
-- destination_key: argen
+That means adding a doctor-name substring under:
+- delivery_modes.designer_doctor_names
+for example:
+- Brier Creek
 
 Example 7:
-"Show Send to Serbia for cases matching this rule, but still route them to 1.9."
+"Send shade C3 to the designer."
 
-That means:
-- keep destination logic unchanged unless separately asked
-- use a bounded route_label_override_key: serbia where supported
-- do not invent a Serbia destination path
+That means adding the shade marker under:
+- shade_overrides.non_outsource_shades
+for example:
+- C3
 
 Example 8:
 "Add a new multi-outcome doctor rule for Bill Stanza."
 
-That means:
+Note: multi-outcome doctor rules are an advanced, template-only feature; doctor_overrides is empty
+by default and rarely needed. Only do this if the user is clearly asking to control TEMPLATE
+selection (not delivery). If so:
 - create a new unique id such as bill_stanza_multi_outcome
 - place it under doctor_overrides.rules
 - use only supported match / when / outcomes / action fields

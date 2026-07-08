@@ -12,61 +12,85 @@ After any change, **save** and **restart** the app.
 
 ---
 
-## Destination vs label (important)
+## Delivery model (read this first)
 
-Case Creator separates:
+Every case is delivered in one of two ways:
 
-1. **`destination_key`** (actual routing target)
-   - `argen`
-   - `"1_9"`
+| Mode | When | Where it goes | Zipped? |
+| --- | --- | --- | --- |
+| **outsource** | **default — all cases** | **Send to AI** | **Yes (zipped)** |
+| **designer** | **exception only** | **Send to 1.9** | **No (unzipped)** |
 
-2. **`route_label_override_key`** (display/readback label)
-   - `argen`
-   - `designer`
-   - `serbia`
-   - `ai_designer`
-   - `ai_serbia`
+A case becomes **designer** only when a YAML disqualifier matches:
 
-When you want “show **Send to Serbia** but still route to **1.9**”, use a bounded
-**label override** (`route_label_override_key`), not a destination path change.
+1. the **doctor name** is listed in `delivery_modes.designer_doctor_names`, **or**
+2. the **shade** matches a marker in `shade_overrides.non_outsource_shades`.
+
+Otherwise the case is **outsource**. `has_study` does **not** affect delivery mode.
+
+> There is no "Send to Serbia" and no Abby/VD special delivery routing anymore. Those are retired
+> as live delivery behavior. Delivery is decided **only** by the two lists above.
 
 ---
 
-## What can be changed in `case_creator_rules.yaml`
+## How to send cases to the designer
 
-## 1) doctor_overrides
+You can enter values two ways — pick whichever is easier. Spaces around commas are ignored, and
+empty entries are dropped.
 
-Use doctor rules to choose template keys and/or bounded label override keys.
+- **Comma-separated line** (simplest):
 
-- **Simple doctor rules**
-  - match doctor text (`contains_any`, `contains_all`) and set:
-    - `action.template_override_key`
-    - optional `action.route_label_override_key`
+  ```yaml
+  designer_doctor_names: Jane Doe, John Smith, Pat Lee
+  ```
 
-- **Richer Abby/VD-style rules**
-  - predicate + `when` + `outcomes[]` for conditional template key selection.
-  - keep to supported fields already in the schema.
+- **YAML list** (one per line):
 
-## 2) shade_overrides
+  ```yaml
+  designer_doctor_names:
+    - Jane Doe
+    - John Smith
+  ```
 
-- Edit `non_argen_shade_markers` list.
-- Keep marker values simple shade code strings.
+### By doctor — `delivery_modes.designer_doctor_names`
 
-## 3) routing_overrides
+Case-insensitive name substrings. Any case whose doctor name contains one of these goes to the
+designer (Send to 1.9, unzipped). Leave it empty to keep every doctor on outsource.
 
-- Edit `template_family_route_overrides` list to map family -> destination key.
-- Allowed family keys: `argen`, `study`, `anterior`, `ai`
-- Allowed destination keys: `argen`, `"1_9"`
+- **Example:** `Jane Doe`
+- **Multiple:** `Jane Doe, John Smith, Pat Lee`
 
-## 4) argen_modes
+### By shade — `shade_overrides.non_outsource_shades`
 
-- Set `contact_model_mode` to `"off"` or `"on"`.
-- Set `contact_model_design_field` to one of:
-  - `"3Shape Automate"` (default/historical behavior)
-  - `"No"`
-- `contact_model_design_field` only affects modeless Argen templates:
-  - `argen_modeless_adzir`
-  - `argen_modeless_envision`
+Any case whose shade matches one of these markers goes to the designer. Use simple shade code
+strings (e.g. `C3`, `A4`, `A3.5`, `B3`).
+
+- **Example:** `C3`
+- **Multiple:** `C3, A4, A3.5`
+
+---
+
+## Other sections (advanced / legacy — not the delivery authority)
+
+These sections remain in the file for template selection and historical compatibility. **None of
+them decides outsource vs designer delivery anymore** — only the two lists above do.
+
+### `doctor_overrides`
+
+**Empty by default** (`rules: []`), and most setups should leave it that way. It is an advanced
+**template**-selection override only — it does **not** change where a case is delivered or whether
+it is zipped. To route a doctor to the designer, use `delivery_modes.designer_doctor_names`, not
+this section.
+
+### `routing_overrides`
+
+Legacy template-family → destination mapping. Retained for compatibility; not used to decide
+outsource vs designer delivery.
+
+### `argen_modes`
+
+Legacy Argen contact-model settings that only affect the two `argen_modeless_*` templates.
+Retained for compatibility; Argen is no longer the active delivery path.
 
 ---
 
@@ -83,85 +107,10 @@ If the schema rejects a field, it is not supported.
 
 ---
 
-## Practical examples
-
-### Example A — Add a simple doctor rule
-
-```yaml
-doctor_overrides:
-  version: 1
-  enabled: true
-  rules:
-    - id: dr_smith_simple
-      enabled: true
-      match:
-        contains_all: ["smith", "dental"]
-      action:
-        template_override_key: ai_envision
-```
-
-### Example B — Show Serbia readback while destination remains 1.9
-
-```yaml
-doctor_overrides:
-  version: 1
-  enabled: true
-  rules:
-    - id: dr_casey_serbia_readback
-      enabled: true
-      match:
-        contains_all: ["casey", "clinic"]
-      action:
-        route_label_override_key: serbia
-```
-
-This changes label/readback behavior only. Destination mapping still comes from template family routing.
-
-### Example C — Turn contact model mode on
-
-```yaml
-argen_modes:
-  version: 1
-  enabled: true
-  contact_model_mode: "on"
-  contact_model_design_field: "No"
-```
-
-### Example D — Add a non-Argen shade marker
-
-```yaml
-shade_overrides:
-  version: 1
-  enabled: true
-  non_argen_shade_markers:
-    - C3
-    - A4
-    - A3.5
-  rules: []
-```
-
-### Example E — Change routing for AI family
-
-```yaml
-routing_overrides:
-  version: 1
-  enabled: true
-  template_family_route_overrides:
-    - family_key: argen
-      destination_key: argen
-    - family_key: study
-      destination_key: "1_9"
-    - family_key: anterior
-      destination_key: "1_9"
-    - family_key: ai
-      destination_key: "1_9"
-```
-
----
-
 ## Quick safety checklist
 
 1. Edit only `case_creator_rules.yaml`.
-2. Keep keys bounded; do not invent fields.
-3. Validate logically (destination vs label intent).
+2. To change **delivery**, edit `delivery_modes.designer_doctor_names` (doctors) or
+   `shade_overrides.non_outsource_shades` (shades).
+3. Keep keys bounded; do not invent fields.
 4. Save and restart.

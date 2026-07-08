@@ -12,7 +12,7 @@ from domain.decisions.manual_review_selector import (
     evaluate_initial_manual_review,
     evaluate_jotform_manual_review,
 )
-from domain.decisions.destination_selector import select_destination
+from domain.decisions.delivery_mode_selector import resolve_delivery_mode, MODE_DESIGNER
 from domain.decisions.template_selector import select_template_path
 from domain.rules import routing_rules, naming_rules
 from infrastructure.config.argen_modes_runtime import resolve_contact_model_design_field
@@ -21,7 +21,6 @@ from config import (
     DEBUG_MODE,
     EVOLUTION_DROP_PATH,     # keep if still used elsewhere
     SEND_TO_AI_PATH,
-    SEND_TO_ARGEN_PATH,
     SEND_TO_1_9_PATH,
     FAILED_IMPORT_PATH,
 )
@@ -62,20 +61,6 @@ def zip_case_folder(folder_path: str, log_callback=lambda *_: None) -> str:
     zip_path = zip_base + ".zip"
     log_callback(f"📦 Created zip: {zip_path}")
     return zip_path
-
-def should_zip(case_data, template_path, target_root) -> bool:
-    """
-    Only zip when:
-      - case is the 'modeless' family (Argen-only per evo_to_case_data), AND
-      - the chosen template is an Argen template (or target_root is Argen path).
-    """
-    destination_key = (
-        routing_rules.DEST_ARGEN
-        if target_root == SEND_TO_ARGEN_PATH
-        else routing_rules.DEST_1_9
-    )
-    return routing_rules.should_zip_modeless_argen(case_data, template_path, destination_key)
-
 
 def is_case_in_jotform(firstname, lastname):
     from config import JOTFORM_PATH
@@ -481,33 +466,19 @@ def process_case(case_number, folder_path, log_callback=print):
         if naming_decision.suffix:
             case_id = naming_decision.final_case_id
             case_data["case_id"] = case_id
-        destination_decision = select_destination(
-            template_filename,
-            case_data.get("doctor", ""),
-            case_data=case_data,
-        )
-        if destination_decision.destination_key == routing_rules.DEST_ARGEN:
-            target_root = SEND_TO_ARGEN_PATH
-        elif destination_decision.destination_key == routing_rules.DEST_1_9:
-            target_root = SEND_TO_1_9_PATH
-            if destination_decision.is_ai_alias_to_designer:
-                debug("[route] AI template re-routed to DESIGNER path")
-
-        # Decide zipping once, based on both modeless family and Argen route
-        do_zip = should_zip(case_data, template_path, target_root)
-        route_label = destination_decision.route_label_key
-
-        if route_label == routing_rules.LABEL_ARGEN:
-            log_callback("🏭 ARGEN CASE")
-        elif route_label == routing_rules.LABEL_DESIGNER:
+        # --- LIVE DELIVERY MODEL: outsource (default) vs designer (exception) ---
+        # Designer is chosen ONLY from YAML disqualifiers (delivery_modes.designer_doctor_names
+        # and shade_overrides.non_outsource_shades). has_study / template family / the retired
+        # Serbia/Abby/VD routing no longer decide delivery. See domain.decisions.delivery_mode_selector.
+        delivery_mode = resolve_delivery_mode(case_data)
+        if delivery_mode == MODE_DESIGNER:
+            target_root = SEND_TO_1_9_PATH   # send-to-designer side
+            do_zip = False                   # designer is delivered UNZIPPED
             log_callback("🧑‍🎓 DESIGNER CASE")
-        elif route_label == routing_rules.LABEL_SERBIA:
-            log_callback("🧑‍🎓 SERBIA CASE")
-        elif route_label == routing_rules.LABEL_AI_DESIGNER:
-            log_callback("🤖 DESIGNER CASE")
-        elif route_label == routing_rules.LABEL_AI_SERBIA:
-            log_callback("🤖 SERBIA CASE")
-
+        else:  # MODE_OUTSOURCE — the default for all cases
+            target_root = SEND_TO_AI_PATH    # send-to-ai side
+            do_zip = True                    # outsource is delivered ZIPPED (reuses zip_case_folder)
+            log_callback("📦 OUTSOURCE CASE")
 
         final_output = os.path.join(target_root, case_id)
         os.makedirs(final_output, exist_ok=True)

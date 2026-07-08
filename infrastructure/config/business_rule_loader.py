@@ -213,6 +213,7 @@ def _schema_defaults_effective() -> Dict[str, Dict[str, Any]]:
         "shade_overrides": schemas.default_shade_overrides(),
         "routing_overrides": schemas.default_routing_overrides(),
         "argen_modes": schemas.default_argen_modes(),
+        "delivery_modes": schemas.default_delivery_modes(),
     }
 
 

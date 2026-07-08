@@ -61,7 +61,14 @@ class TestUnifiedRetirementEquivalence(unittest.TestCase):
 
             merged = {"unified_version": 1}
             for fam in schemas.SUPPORTED_FAMILIES:
-                merged[fam] = yaml.safe_load((ARCHIVE / f"{fam}.yaml").read_text(encoding="utf-8"))
+                archived = ARCHIVE / f"{fam}.yaml"
+                # Families added after the split archive was frozen (e.g. delivery_modes) have no
+                # archived file; omit them so the unified validator fills them with defaults.
+                if archived.is_file():
+                    merged[fam] = yaml.safe_load(archived.read_text(encoding="utf-8"))
+            # doctor_overrides was intentionally cleared to empty in the current business model; the
+            # frozen split archive predates that, so use the current default to match the canonical.
+            merged["doctor_overrides"] = schemas.default_doctor_overrides()
             vr = schemas.validate_unified_business_rules_config(merged)
             self.assertTrue(vr.valid, vr.errors)
             assert vr.normalized is not None
@@ -70,12 +77,14 @@ class TestUnifiedRetirementEquivalence(unittest.TestCase):
             self.assertEqual(resolve_contact_model_mode(), eff["argen_modes"]["contact_model_mode"])
             self.assertEqual(
                 resolve_non_argen_shade_markers(()),
-                tuple(x.upper() for x in eff["shade_overrides"]["non_argen_shade_markers"]),
+                tuple(x.upper() for x in eff["shade_overrides"]["non_outsource_shades"]),
             )
             self.assertEqual(
                 resolve_destination_key("something_ai_envision_study.xyz"),
                 "1_9",
             )
+            # The stale Abby/VD doctor_overrides rules were removed from the canonical file. Even
+            # with outcomes evaluation forced on, the cleaned canonical yields no template override.
             case = {
                 "doctor": "Abby Dew",
                 "material": "adz multilayer",
@@ -89,7 +98,7 @@ class TestUnifiedRetirementEquivalence(unittest.TestCase):
             os.environ["CASE_CREATOR_DOCTOR_OUTCOMES_LIVE"] = "1"
             clear_doctor_override_cache()
             key = resolve_doctor_template_override_key(case["doctor"], case)
-            self.assertEqual(key, "ai_adzir")
+            self.assertIsNone(key)
         finally:
             os.environ.pop("CASE_CREATOR_DOCTOR_OUTCOMES_LIVE", None)
             if prev is None:
