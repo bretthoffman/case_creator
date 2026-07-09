@@ -82,7 +82,7 @@ def build_case_data_from_evo(clean: Dict[str, Any]) -> Dict[str, Any]:
     raw_shade = _first_shade_raw(services)
     shade, _shade_dbg = _pick_single_shade(raw_shade)
 
-    # Base route from services (regular / argen_envision / argen_adzir)
+    # Base route from services (regular / argen_envision / argen_adzir / emax)
     route = _route_from_services(services)
     needs_model = _needs_model(services)
 
@@ -95,8 +95,8 @@ def build_case_data_from_evo(clean: Dict[str, Any]) -> Dict[str, Any]:
     # Effective modeless flag (will be False while disabled)
     modeless = detected_modeless and not disable_modeless
 
-    # Material is useful downstream for any Argen decisions
-    material = _material_from_services(services)  # 'adz' or 'envision'
+    # Material is useful downstream for template selection and Argen decisions
+    material = _material_from_services(services)  # 'adz', 'emax', or 'envision'
 
     # Only label as 'modeless' if it's enabled, an ARGEN case, AND services indicate modeless
     if modeless and route in ("argen_envision", "argen_adzir"):
@@ -141,7 +141,7 @@ def build_case_data_from_evo(clean: Dict[str, Any]) -> Dict[str, Any]:
             "route": route,        # while disabled: 'argen_envision'/'argen_adzir'/'regular' (never 'modeless')
             "needs_model": needs_model,
             "modeless": modeless,  # False while disabled
-            "material": material,  # 'adz' or 'envision'
+            "material": material,  # 'adz', 'emax', or 'envision'
         },
 
         # Optional: include debug info if you want to log later

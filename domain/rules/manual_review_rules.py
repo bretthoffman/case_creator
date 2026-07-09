@@ -1,7 +1,7 @@
 from typing import Any, Dict, Iterable, Optional, Set
 
-ALLOWED_ROUTES = ("argen_envision", "argen_adzir", "modeless")
-MATERIAL_HINT_KEYWORDS = ("emax", "lithium disilicate", "gold", "alloy", "pfm", "full cast")
+ALLOWED_ROUTES = ("argen_envision", "argen_adzir", "modeless", "emax")
+MATERIAL_HINT_KEYWORDS = ("gold", "alloy", "pfm", "full cast")
 
 REASON_MULTI_UNIT = "multi_unit"
 REASON_UNSUPPORTED_MATERIAL = "unsupported_material"

@@ -7,6 +7,16 @@ from infrastructure.config.shade_override_runtime import resolve_non_argen_shade
 NON_ARGEN_SHADE_MARKERS = ("C3", "A4")
 ARGEN_ROUTE_KEYS = ("argen_envision", "argen_adzir")
 
+# Legacy Argen folder keys still appear in hints/overrides; never open templates/argen_* files.
+ARGEN_LEGACY_FOLDER_KEYS = frozenset(
+    {
+        "argen_envision",
+        "argen_adzir",
+        "argen_modeless_envision",
+        "argen_modeless_adzir",
+    }
+)
+
 
 def is_non_argen_shade(shade: str) -> bool:
     if not shade:
@@ -22,6 +32,40 @@ def is_itero_scanner(scanner: str) -> bool:
 
 def is_adz_material(material: str) -> bool:
     return "adz" in (material or "").lower()
+
+
+def is_emax_material(material: str) -> bool:
+    return "emax" in (material or "").lower()
+
+
+def outsource_envision_folder(*, is_itero: bool) -> str:
+    """Non-Argen outsource Envision: iTero = models off, non-iTero = models on."""
+    return "ai_envision" if is_itero else "ai_envision_model"
+
+
+def outsource_adzir_folder(*, is_itero: bool) -> str:
+    """Non-Argen outsource ADZIR: iTero = models off, non-iTero = models on."""
+    return "ai_adzir" if is_itero else "ai_adzir_model"
+
+
+def resolve_argen_legacy_folder(folder: str, *, is_itero: bool) -> str:
+    """
+    Map legacy Argen folder keys to non-Argen templates.
+
+    iTero-style outsource uses ai_* (digital impression / models off).
+    Non-iTero outsource uses ai_*_model (ModelBuilder / antagonist models on).
+    Modeless/contact-model legacy keys always use the model templates.
+    """
+    key = (folder or "").strip().lower()
+    if key == "argen_envision":
+        return outsource_envision_folder(is_itero=is_itero)
+    if key == "argen_adzir":
+        return outsource_adzir_folder(is_itero=is_itero)
+    if key == "argen_modeless_envision":
+        return "ai_envision_model"
+    if key == "argen_modeless_adzir":
+        return "ai_adzir_model"
+    return folder
 
 
 def normalized_hint_route(case_data) -> str:
@@ -56,6 +100,16 @@ def is_eligible_contact_model_argen_case(case_data) -> bool:
     return r in ARGEN_ROUTE_KEYS or r == "modeless"
 
 
-def build_template_path(folder: str) -> str:
-    filename = f"{folder}.xml"
-    return os.path.join(TEMPLATE_DIR, folder, filename)
+def resolve_template_folder(folder: str, case_data=None) -> str:
+    """Map legacy Argen template folder keys to their non-Argen equivalents."""
+    key = (folder or "").strip().lower()
+    if key in ARGEN_LEGACY_FOLDER_KEYS:
+        is_itero = is_itero_scanner((case_data or {}).get("scanner", ""))
+        return resolve_argen_legacy_folder(key, is_itero=is_itero)
+    return folder
+
+
+def build_template_path(folder: str, case_data=None) -> str:
+    resolved = resolve_template_folder(folder, case_data)
+    filename = f"{resolved}.xml"
+    return os.path.join(TEMPLATE_DIR, resolved, filename)

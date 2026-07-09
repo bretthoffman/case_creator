@@ -260,6 +260,9 @@ def process_case(case_number, folder_path, log_callback=print):
             mat = (case_data.get("material_hint", {}).get("material") or "").lower()
             case_data["material"] = "adz" if mat == "adz" else "envision"
             log_callback("🧱 MODELESS CASE (Argen)")
+        elif route == "emax":
+            case_data["material"] = "emax"
+            log_callback("🦷 EMAX CASE")
         else:
             # Legacy behavior for non-modeless routes
             case_data["material"] = "adz" if any(k in route for k in ("adz", "adzir", "argenz")) else "envision"
@@ -813,7 +816,8 @@ def generate_final_xml(case_data, output_path):
 
     # 6. Material substitution
     material_value = map_material_to_xml(case_data)
-    if case_data.get("has_study"):
+    uses_argen_material_placeholder = template_key.startswith("argen_")
+    if case_data.get("has_study") or not uses_argen_material_placeholder:
         substitutions["MATERIAL"] = material_value
     else:
         substitutions["ARGEN_MATERIAL"] = material_value

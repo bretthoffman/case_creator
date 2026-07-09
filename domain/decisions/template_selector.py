@@ -39,6 +39,6 @@ def select_template_path(case_data):
             )
 
     if override_template_key:
-        return template_rules.build_template_path(override_template_key)
+        return template_rules.build_template_path(override_template_key, case_data)
 
     return selected

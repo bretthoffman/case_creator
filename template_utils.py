@@ -37,9 +37,16 @@ def select_template(case_data):
         material,
     )
 
-    # 🔒 Rule: Anterior teeth cannot be sent to Argen
+    is_emax = hint_route == "emax" or template_rules.is_emax_material(material)
 
-    if is_anterior and not has_study:
+    if is_emax:
+        if has_study:
+            folder = "reg_emax_ant_study" if is_anterior else "reg_emax_post_study"
+        else:
+            folder = "reg_emax_ant" if is_anterior else "reg_emax_post"
+
+    # 🔒 Rule: Anterior teeth cannot be sent to Argen
+    elif is_anterior and not has_study:
         if is_itero and template_rules.is_adz_material(material):
             folder = "itero_adzir_anterior"
         elif is_itero:
@@ -49,7 +56,7 @@ def select_template(case_data):
         else:
             folder = "reg_envision_anterior"
 
-    # Argen contact-model mode ON: valid Argen routes go straight to contact-model templates (not via hint rewriting).
+    # Legacy Argen contact-model / modeless hint routes: folder keys reroute to ai_*_model via template_rules.
     elif (
         template_rules.contact_model_argen_on()
         and template_rules.is_eligible_contact_model_argen_case(case_data)
@@ -61,9 +68,12 @@ def select_template(case_data):
             else "argen_modeless_envision"
         )
 
-    # Modeless (Argen-only) fast path when hint is modeless and contact-model mode is off (or study path above skipped).
     elif hint_route == "modeless" and not has_study:
-        folder = "argen_modeless_adzir" if template_rules.is_adz_material(material) else "argen_modeless_envision"
+        folder = (
+            "argen_modeless_adzir"
+            if template_rules.is_adz_material(material)
+            else "argen_modeless_envision"
+        )
 
     elif is_ai and is_itero:
         folder = "ai_envision"
@@ -93,7 +103,7 @@ def select_template(case_data):
         folder = "ai_envision_model"
 
     elif not has_study and not signature and template_rules.is_adz_material(material) and shade_usable and not non_argen_shade and not is_abby and not is_vd_serbia:
-        folder = "argen_adzir"
+        folder = template_rules.outsource_adzir_folder(is_itero=is_itero)
 
     elif not has_study and not signature and template_rules.is_adz_material(material) and shade_usable and non_argen_shade and is_itero:
         folder = "ai_adzir"
@@ -108,7 +118,7 @@ def select_template(case_data):
         folder = "ai_adzir"
 
     elif not has_study and not signature and not template_rules.is_adz_material(material) and shade_usable and not non_argen_shade and not is_abby and not is_vd_serbia:
-        folder = "argen_envision"
+        folder = template_rules.outsource_envision_folder(is_itero=is_itero)
 
     elif not has_study and not signature and not template_rules.is_adz_material(material) and shade_usable and non_argen_shade and is_itero:
         folder = "ai_envision"
@@ -137,7 +147,7 @@ def select_template(case_data):
     else:
         raise ValueError("❌ Could not determine a valid template mapping for this case.")
 
-    template_path = template_rules.build_template_path(folder)
+    template_path = template_rules.build_template_path(folder, case_data)
     if is_anterior:
         print(f"[TEMPLATE] 🚫 Anterior tooth — using: {template_path}")
     else:
@@ -194,17 +204,14 @@ def generate_id_block():
     }
 
 def map_material_to_xml(case_data):
+    """Map case material to XML placeholder values for non-Argen templates."""
     material = case_data.get("material", "").lower()
-    has_study = case_data.get("has_study", False)
-
-    if not has_study and "adz" in material:
-        return "ArgenZ HT+ Multilayer"
-    elif not has_study:
-        return "ArgenZ ST Multilayer Pre-Shaded"
-    elif "adz" in material:
+    hint_route = template_rules.normalized_hint_route(case_data)
+    if hint_route == "emax" or template_rules.is_emax_material(material):
+        return "EMax Anterior" if case_data.get("is_anterior") else "EMax Posterior"
+    if "adz" in material:
         return "Adzir"
-    else:
-        return "Multi layer"
+    return "Multi layer"
     
 def inject_shade_into_materials(materials_template_path: str, destination_path: str, shade: str):
     with open(materials_template_path, 'r', encoding='utf-8') as f:
