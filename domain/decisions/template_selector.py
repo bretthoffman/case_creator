@@ -39,6 +39,36 @@ def select_template_path(case_data):
             )
 
     if override_template_key:
-        return template_rules.build_template_path(override_template_key, case_data)
+        selected = template_rules.build_template_path(override_template_key, case_data)
 
-    return selected
+    return _apply_itero_outsource_template_reroute(selected, case_data)
+
+
+def _apply_itero_outsource_template_reroute(template_path, case_data):
+    """
+    Outsource iTero cases that would use itero_* study/anterior templates instead use the
+    corresponding reg_* templates (digital impression / antagonist settings for outsource).
+    Designer iTero cases keep the baseline itero_* selection.
+    """
+    from domain.decisions.delivery_mode_selector import MODE_OUTSOURCE, resolve_delivery_mode
+    from domain.rules import template_rules
+
+    cd = case_data or {}
+    if resolve_delivery_mode(cd) != MODE_OUTSOURCE:
+        return template_path
+    if not template_rules.is_itero_scanner(cd.get("scanner", "")):
+        return template_path
+
+    folder = os.path.basename(os.path.dirname(template_path))
+    remapped = template_rules.remap_itero_folder_for_outsource(folder)
+    if remapped == folder:
+        return template_path
+
+    _LOGGER.info(
+        "case_creator_itero_outsource_template_reroute scanner=%r baseline_template=%r "
+        "rerouted_template=%r",
+        cd.get("scanner"),
+        folder,
+        remapped,
+    )
+    return template_rules.build_template_path(remapped, case_data)
