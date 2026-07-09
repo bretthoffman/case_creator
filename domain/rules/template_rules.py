@@ -30,18 +30,20 @@ def is_itero_scanner(scanner: str) -> bool:
     return "itero" in (scanner or "").lower()
 
 
-# iTero study/anterior templates use ScanItRestoration; outsource iTero cases need reg_* instead.
-ITERO_TO_REG_OUTSOURCE_MAP = {
+# Outsource iTero reroutes: study/anterior itero_* -> reg_*; posterior ai_* -> ai_*_model.
+ITERO_OUTSOURCE_FOLDER_MAP = {
     "itero_adzir_anterior": "reg_adzir_anterior",
     "itero_adzir_study": "reg_adzir_study",
     "itero_envision_anterior": "reg_envision_anterior",
     "itero_envision_study": "reg_envision_study",
+    "ai_adzir": "ai_adzir_model",
+    "ai_envision": "ai_envision_model",
 }
 
 
 def remap_itero_folder_for_outsource(folder: str) -> str:
-    """Map iTero study/anterior template folders to reg_* for outsource delivery."""
-    return ITERO_TO_REG_OUTSOURCE_MAP.get((folder or "").strip().lower(), folder)
+    """Map outsource iTero template folders to the non-iTero outsource equivalents."""
+    return ITERO_OUTSOURCE_FOLDER_MAP.get((folder or "").strip().lower(), folder)
 
 
 def is_adz_material(material: str) -> bool:

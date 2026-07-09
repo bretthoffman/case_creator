@@ -250,12 +250,12 @@ class TestArgenTemplateReroute(unittest.TestCase):
 
         self.assertEqual(
             path,
-            template_rules.build_template_path("argen_envision", case),
+            template_rules.build_template_path("ai_envision_model", case),
         )
-        self.assertIn("ai_envision", path)
+        self.assertIn("ai_envision_model", path)
         self.assertNotIn("argen", path.lower())
 
-    def test_itero_generated_xml_preserves_models_off(self) -> None:
+    def test_outsource_itero_generated_xml_matches_trios_models_on(self) -> None:
         from case_processor_final_clean import generate_final_xml
 
         with tempfile.TemporaryDirectory() as td:
@@ -272,6 +272,34 @@ class TestArgenTemplateReroute(unittest.TestCase):
                 "is_ai": False,
                 "is_anterior": False,
                 "shade": "A1",
+                "OrderComments": "",
+                "due_date": "2026-07-09",
+                "material_hint": {"route": "argen_envision", "material": "envision"},
+            }
+            generate_final_xml(case, str(out))
+            xml = out.read_text(encoding="utf-8")
+
+        self.assertIn("ModelBuilder", xml)
+        self.assertIn("Antagonist model", xml)
+        self.assertNotIn("ScanItRestoration", xml)
+
+    def test_designer_itero_generated_xml_preserves_models_off(self) -> None:
+        from case_processor_final_clean import generate_final_xml
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "itero_designer.xml"
+            case = {
+                "case_id": "ITERO-DESIGNER-001",
+                "tooth": "8",
+                "doctor": "Generic Lakeside Dental",
+                "material": "envision multilayer",
+                "has_study": False,
+                "signature": False,
+                "scanner": "itero",
+                "shade_usable": True,
+                "is_ai": False,
+                "is_anterior": False,
+                "shade": "C3",
                 "OrderComments": "",
                 "due_date": "2026-07-09",
                 "material_hint": {"route": "argen_envision", "material": "envision"},

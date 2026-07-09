@@ -1,5 +1,5 @@
 """
-iTero + outsource study/anterior cases must use reg_* templates; designer iTero unchanged.
+iTero + outsource cases use the same templates as non-iTero outsource; designer iTero unchanged.
 
 Run:
   python -m unittest tests.test_itero_outsource_template_reroute -v
@@ -189,6 +189,48 @@ class TestIteroOutsourceTemplateReroute(unittest.TestCase):
             )
         )
         self.assertEqual(folder, "reg_emax_ant")
+
+    def test_outsource_itero_posterior_adzir_uses_model_template(self) -> None:
+        folder = self._select_folder(
+            _base_itero_case(
+                material="adz multilayer",
+                material_hint={"route": "argen_adzir", "material": "adz"},
+            )
+        )
+        self.assertEqual(folder, "ai_adzir_model")
+
+    def test_outsource_itero_posterior_envision_uses_model_template(self) -> None:
+        folder = self._select_folder(
+            _base_itero_case(
+                material="envision multilayer",
+                material_hint={"route": "argen_envision", "material": "envision"},
+            )
+        )
+        self.assertEqual(folder, "ai_envision_model")
+
+    def test_outsource_itero_posterior_matches_trios_envision(self) -> None:
+        from domain.decisions.template_selector import select_template_path
+
+        case = _base_itero_case(
+            material="envision multilayer",
+            material_hint={"route": "argen_envision", "material": "envision"},
+        )
+        trios_case = dict(case, scanner="trios")
+        with patch("builtins.print"):
+            itero_folder = _folder_from_path(select_template_path(case))
+            trios_folder = _folder_from_path(select_template_path(trios_case))
+        self.assertEqual(itero_folder, trios_folder)
+        self.assertEqual(itero_folder, "ai_envision_model")
+
+    def test_designer_itero_posterior_keeps_ai_envision(self) -> None:
+        folder = self._select_folder(
+            _base_itero_case(
+                shade="C3",
+                material="envision multilayer",
+                material_hint={"route": "argen_envision", "material": "envision"},
+            )
+        )
+        self.assertEqual(folder, "ai_envision")
 
     def test_non_itero_outsource_study_unchanged(self) -> None:
         folder = self._select_folder(
