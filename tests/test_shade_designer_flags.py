@@ -1,5 +1,5 @@
 """
-Shade substring flags (custom / photos) route cases to designer delivery.
+Shade substring flags (custom / photos / match) route cases to designer delivery.
 
 Run:
   python -m unittest tests.test_shade_designer_flags -v
@@ -83,32 +83,41 @@ class TestShadeSubstringDetection(unittest.TestCase):
         self.assertTrue(tu.shade_field_contains_photos("PHOTOSHOOT"))
         self.assertFalse(tu.shade_field_contains_photos("A2"))
 
+    def test_match_case_insensitive_substring(self) -> None:
+        import template_utils as tu
+
+        self.assertTrue(tu.shade_field_contains_match("Shade Match"))
+        self.assertTrue(tu.shade_field_contains_match("MATCHING"))
+        self.assertFalse(tu.shade_field_contains_match("A2"))
+
     def test_apply_flags_respects_toggles(self) -> None:
         import template_utils as tu
 
-        case = {"shade_raw": "A1 Custom, see photos"}
+        case = {"shade_raw": "A1 Custom, see photos, shade match"}
         with patch.object(tu, "FLAG_CUSTOM_SHADE_TO_DESIGNER", True), patch.object(
             tu, "FLAG_PHOTOS_SHADE_TO_DESIGNER", True
-        ):
+        ), patch.object(tu, "FLAG_MATCH_SHADE_TO_DESIGNER", True):
             tu.apply_shade_designer_flags(case)
         self.assertTrue(case["shade_custom"])
         self.assertTrue(case["shade_photos"])
+        self.assertTrue(case["shade_match"])
 
-        case2 = {"shade_raw": "A1 Custom, see photos"}
+        case2 = {"shade_raw": "A1 Custom, see photos, shade match"}
         with patch.object(tu, "FLAG_CUSTOM_SHADE_TO_DESIGNER", False), patch.object(
             tu, "FLAG_PHOTOS_SHADE_TO_DESIGNER", False
-        ):
+        ), patch.object(tu, "FLAG_MATCH_SHADE_TO_DESIGNER", False):
             tu.apply_shade_designer_flags(case2)
         self.assertFalse(case2["shade_custom"])
         self.assertFalse(case2["shade_photos"])
+        self.assertFalse(case2["shade_match"])
 
     def test_reason_lines(self) -> None:
         import template_utils as tu
 
         lines = tu.shade_designer_reason_lines(
-            {"shade_custom": True, "shade_photos": True}
+            {"shade_custom": True, "shade_photos": True, "shade_match": True}
         )
-        self.assertEqual(lines, ["Custom Shade", "See Photos"])
+        self.assertEqual(lines, ["Custom Shade", "See Photos", "Shade Match"])
 
 
 class TestShadeDesignerDeliveryMode(unittest.TestCase):
@@ -130,6 +139,13 @@ class TestShadeDesignerDeliveryMode(unittest.TestCase):
         with _ConfigEnv():
             self.assertEqual(
                 self._mode(doctor="Jane Doe", shade="A2", shade_raw="See Photos"),
+                "designer",
+            )
+
+    def test_match_shade_routes_designer(self) -> None:
+        with _ConfigEnv():
+            self.assertEqual(
+                self._mode(doctor="Jane Doe", shade="A2", shade_raw="Shade Match"),
                 "designer",
             )
 
@@ -201,6 +217,66 @@ class TestShadeDesignerProcessWiring(unittest.TestCase):
         self.assertNotIn(".zip", result)
         self.assertIn("🧑‍🎓 DESIGNER CASE", logs)
         self.assertIn("Custom Shade", logs)
+
+    def test_match_shade_designer_unzipped(self) -> None:
+        import case_processor_final_clean as cpf
+
+        work = tempfile.TemporaryDirectory()
+        wp = Path(work.name)
+        folder = wp / "input_case"
+        folder.mkdir()
+        ai_dir = wp / "Send to AI"
+        ai_dir.mkdir()
+        designer_dir = wp / "Send to 1.9"
+        designer_dir.mkdir()
+        failed_dir = wp / "Failed"
+        failed_dir.mkdir()
+        renamed_scan_dir = wp / "scans" / "Scans" / "UNN08"
+        renamed_scan_dir.mkdir(parents=True)
+        (renamed_scan_dir / "PreparationScan.stl").write_bytes(b"stl")
+        template_dir = wp / "tpl"
+        template_dir.mkdir()
+        template_xml = template_dir / "ai_envision.xml"
+        template_xml.write_text("<x/>", encoding="utf-8")
+
+        case_data = {
+            "case_id": "C1",
+            "doctor": "Jane Doe",
+            "first": "Pat",
+            "last": "Ient",
+            "tooth": "8",
+            "arch": "Upper",
+            "shade": "A2",
+            "shade_raw": "A2 Match",
+            "scanner": "",
+            "is_ai": False,
+            "is_anterior": False,
+            "OrderComments": "",
+            "material_hint": {"route": "regular", "material": "envision"},
+        }
+
+        logs = []
+        with _ConfigEnv():
+            with patch.multiple(
+                cpf,
+                get_case_detail_clean=lambda *_a, **_k: {},
+                build_case_data_from_evo=lambda *_a, **_k: dict(case_data),
+                evaluate_initial_manual_review=lambda *_a, **_k: SimpleNamespace(
+                    requires_manual_review=False, message=None, detail=None, return_value=None
+                ),
+                select_template_path=lambda cd: str(template_xml),
+                generate_final_xml=lambda cd, out: str(template_dir),
+                rename_scans=lambda *_a, **_k: (False, str(renamed_scan_dir)),
+                SEND_TO_AI_PATH=str(ai_dir),
+                SEND_TO_1_9_PATH=str(designer_dir),
+                FAILED_IMPORT_PATH=str(failed_dir),
+            ):
+                result = cpf.process_case("C1", str(folder), log_callback=logs.append)
+
+        work.cleanup()
+        self.assertNotIn(".zip", result)
+        self.assertIn("🧑‍🎓 DESIGNER CASE", logs)
+        self.assertIn("Shade Match", logs)
 
 
 if __name__ == "__main__":

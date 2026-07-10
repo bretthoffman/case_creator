@@ -121,7 +121,7 @@ class TestIteroOutsourceTemplateReroute(unittest.TestCase):
         )
         self.assertEqual(folder, "reg_adzir_anterior")
 
-    def test_outsource_itero_adzir_study_uses_reg(self) -> None:
+    def test_outsource_itero_adzir_study_uses_itero_outsource_study_template(self) -> None:
         folder = self._select_folder(
             _base_itero_case(
                 has_study=True,
@@ -129,7 +129,7 @@ class TestIteroOutsourceTemplateReroute(unittest.TestCase):
                 material_hint={"route": "regular", "material": "adz"},
             )
         )
-        self.assertEqual(folder, "reg_adzir_study")
+        self.assertEqual(folder, "itero_outsource_adzir_study")
 
     def test_outsource_itero_envision_anterior_uses_reg(self) -> None:
         folder = self._select_folder(
@@ -141,7 +141,7 @@ class TestIteroOutsourceTemplateReroute(unittest.TestCase):
         )
         self.assertEqual(folder, "reg_envision_anterior")
 
-    def test_outsource_itero_envision_study_uses_reg(self) -> None:
+    def test_outsource_itero_envision_study_uses_itero_outsource_study_template(self) -> None:
         folder = self._select_folder(
             _base_itero_case(
                 has_study=True,
@@ -149,7 +149,7 @@ class TestIteroOutsourceTemplateReroute(unittest.TestCase):
                 material_hint={"route": "regular", "material": "envision"},
             )
         )
-        self.assertEqual(folder, "reg_envision_study")
+        self.assertEqual(folder, "itero_outsource_envision_study")
 
     def test_designer_itero_study_keeps_itero_template(self) -> None:
         folder = self._select_folder(

@@ -475,13 +475,14 @@ def process_case(case_number, folder_path, log_callback=print):
         # Designer is chosen ONLY from YAML disqualifiers (delivery_modes.designer_doctor_names
         # and shade_overrides.non_outsource_shades). has_study / template family / the retired
         # Serbia/Abby/VD routing no longer decide delivery. See domain.decisions.delivery_mode_selector.
+        for reason in shade_designer_reason_lines(case_data):
+            log_callback(reason)
+
         delivery_mode = resolve_delivery_mode(case_data)
         if delivery_mode == MODE_DESIGNER:
             target_root = SEND_TO_1_9_PATH   # send-to-designer side
             do_zip = False                   # designer is delivered UNZIPPED
             log_callback("🧑‍🎓 DESIGNER CASE")
-            for reason in shade_designer_reason_lines(case_data):
-                log_callback(reason)
         else:  # MODE_OUTSOURCE — the default for all cases
             target_root = SEND_TO_AI_PATH    # send-to-ai side
             do_zip = True                    # outsource is delivered ZIPPED (reuses zip_case_folder)

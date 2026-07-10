@@ -8,7 +8,7 @@ Serbia/Abby/VD routing logic.
 Designer is chosen ONLY from YAML-managed disqualifiers:
   - doctor names  -> delivery_modes.designer_doctor_names   (via delivery_mode_runtime)
   - shades        -> shade_overrides.non_outsource_shades (via template_rules.is_non_argen_shade)
-  - shade text    -> template_utils shade flags (custom / photos in raw EVO shade field)
+  - shade text    -> template_utils shade flags (custom / photos / match in raw EVO shade field)
 
 Everything else is outsource.
 """

@@ -1485,6 +1485,17 @@ class MainWindow(QMainWindow):
     def _route_log_panels(self, message):
         msg = message.strip()
 
+        # Suppress redundant zip cleanup lines (Created zip line is sufficient)
+        if (
+            msg.startswith("🧹 Removed unzipped folder: ")
+            or (msg.startswith("Completed ") and "→" in msg)
+        ):
+            return False, False
+
+        # Shade-driven designer flags: show in both panels (process log is the import readback)
+        if msg in ("Custom Shade", "See Photos", "Shade Match"):
+            return True, True
+
         # Left panel: Case Summary (exact list requested)
         if (
             msg.startswith("Pt: ")
@@ -1497,8 +1508,6 @@ class MainWindow(QMainWindow):
             or msg == "🧱 MODELESS CASE (Argen)"
             or msg == "🏭 ARGEN CASE"
             or msg == "🧑‍🎓 DESIGNER CASE"
-            or msg == "Custom Shade"
-            or msg == "See Photos"
             or msg == "🧑‍🎓 SERBIA CASE"
             or msg == "🤖 DESIGNER CASE"
             or msg == "🤖 SERBIA CASE"
@@ -1525,14 +1534,12 @@ class MainWindow(QMainWindow):
             or msg.startswith("📁 (fallback) Found matching folder in ")
             or msg.startswith("📄 Using template: ")
             or msg.startswith("📦 Created zip: ")
-            or msg.startswith("🧹 Removed unzipped folder: ")
             or msg.startswith("⚠️ Could not remove existing zip: ")
             or msg.startswith("⚠️ Failed to remove unzipped folder: ")
             or msg.startswith("⚠️ Timeout warning: Case ")
             or msg.startswith("Error while importing: ")
             or msg.startswith("Finished: ")
             or msg == "Queue empty."
-            or (msg.startswith("Completed ") and "→" in msg)
         ):
             return False, True
 

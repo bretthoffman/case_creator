@@ -12,6 +12,7 @@ from domain.rules import template_rules
 # ---- shade → designer delivery toggles (checked against raw EVO shade text) ----
 FLAG_CUSTOM_SHADE_TO_DESIGNER = True
 FLAG_PHOTOS_SHADE_TO_DESIGNER = True
+FLAG_MATCH_SHADE_TO_DESIGNER = True
 
 
 def shade_field_contains_custom(shade_text: str) -> bool:
@@ -24,18 +25,28 @@ def shade_field_contains_photos(shade_text: str) -> bool:
     return "photos" in (shade_text or "").lower()
 
 
+def shade_field_contains_match(shade_text: str) -> bool:
+    """Case-insensitive substring match for 'match' anywhere in the shade field."""
+    return "match" in (shade_text or "").lower()
+
+
 def apply_shade_designer_flags(case_data) -> None:
-    """Set shade_custom / shade_photos on case_data from the raw EVO shade field(s)."""
+    """Set shade_custom / shade_photos / shade_match on case_data from the raw EVO shade field(s)."""
     shade_raw = (case_data or {}).get("shade_raw") or ""
     cd = case_data or {}
     cd["shade_custom"] = FLAG_CUSTOM_SHADE_TO_DESIGNER and shade_field_contains_custom(shade_raw)
     cd["shade_photos"] = FLAG_PHOTOS_SHADE_TO_DESIGNER and shade_field_contains_photos(shade_raw)
+    cd["shade_match"] = FLAG_MATCH_SHADE_TO_DESIGNER and shade_field_contains_match(shade_raw)
 
 
 def shade_routes_to_designer(case_data) -> bool:
     """True when a enabled shade substring flag matched the raw EVO shade field."""
     cd = case_data or {}
-    return bool(cd.get("shade_custom")) or bool(cd.get("shade_photos"))
+    return (
+        bool(cd.get("shade_custom"))
+        or bool(cd.get("shade_photos"))
+        or bool(cd.get("shade_match"))
+    )
 
 
 def shade_designer_reason_lines(case_data) -> list[str]:
@@ -46,6 +57,8 @@ def shade_designer_reason_lines(case_data) -> list[str]:
         lines.append("Custom Shade")
     if cd.get("shade_photos"):
         lines.append("See Photos")
+    if cd.get("shade_match"):
+        lines.append("Shade Match")
     return lines
 
 

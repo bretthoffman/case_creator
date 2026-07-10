@@ -22,7 +22,7 @@ def _first_shade_raw(services: list) -> str:
 
 
 def _all_shades_raw(services: list) -> str:
-    """Join all non-empty raw shade strings for substring checks (custom/photos)."""
+    """Join all non-empty raw shade strings for substring checks (custom/photos/match)."""
     parts = []
     for s in services or []:
         for t in s.get("toothlist", []):

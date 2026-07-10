@@ -30,12 +30,13 @@ def is_itero_scanner(scanner: str) -> bool:
     return "itero" in (scanner or "").lower()
 
 
-# Outsource iTero reroutes: study/anterior itero_* -> reg_*; posterior ai_* -> itero_outsource_*.
+# Outsource iTero reroutes: study/anterior itero_* -> reg_* or itero_outsource_*_study;
+# posterior ai_* -> itero_outsource_*.
 ITERO_OUTSOURCE_FOLDER_MAP = {
     "itero_adzir_anterior": "reg_adzir_anterior",
-    "itero_adzir_study": "reg_adzir_study",
+    "itero_adzir_study": "itero_outsource_adzir_study",
     "itero_envision_anterior": "reg_envision_anterior",
-    "itero_envision_study": "reg_envision_study",
+    "itero_envision_study": "itero_outsource_envision_study",
     "ai_adzir": "itero_outsource_adzir",
     "ai_envision": "itero_outsource_envision",
 }

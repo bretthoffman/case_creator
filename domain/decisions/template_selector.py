@@ -47,9 +47,9 @@ def select_template_path(case_data):
 def _apply_itero_outsource_template_reroute(template_path, case_data):
     """
     Outsource iTero cases use the same template families as non-iTero outsource for
-    study/anterior (itero_* -> reg_*). Posterior ai_adzir/ai_envision reroute to
-    itero_outsource_* (digital impression, ModelBuilder off). Designer iTero keeps
-    the baseline selection.
+    anterior (itero_* -> reg_*). Study iTero outsource uses itero_outsource_*_study;
+    posterior ai_adzir/ai_envision reroute to itero_outsource_* (digital impression,
+    ModelBuilder off). Designer iTero keeps the baseline selection.
     """
     from domain.decisions.delivery_mode_selector import MODE_OUTSOURCE, resolve_delivery_mode
     from domain.rules import template_rules
