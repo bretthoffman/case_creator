@@ -271,6 +271,8 @@ def process_case(case_number, folder_path, log_callback=print):
 
         # 2) shade_usable: true if a shade string exists
         case_data["shade_usable"] = bool((case_data.get("shade") or "").strip())
+        from template_utils import apply_shade_designer_flags, shade_designer_reason_lines
+        apply_shade_designer_flags(case_data)
 
         # 3) signature: use your helper
         from template_utils import is_signature_doctor
@@ -478,6 +480,8 @@ def process_case(case_number, folder_path, log_callback=print):
             target_root = SEND_TO_1_9_PATH   # send-to-designer side
             do_zip = False                   # designer is delivered UNZIPPED
             log_callback("🧑‍🎓 DESIGNER CASE")
+            for reason in shade_designer_reason_lines(case_data):
+                log_callback(reason)
         else:  # MODE_OUTSOURCE — the default for all cases
             target_root = SEND_TO_AI_PATH    # send-to-ai side
             do_zip = True                    # outsource is delivered ZIPPED (reuses zip_case_folder)

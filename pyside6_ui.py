@@ -1497,6 +1497,8 @@ class MainWindow(QMainWindow):
             or msg == "🧱 MODELESS CASE (Argen)"
             or msg == "🏭 ARGEN CASE"
             or msg == "🧑‍🎓 DESIGNER CASE"
+            or msg == "Custom Shade"
+            or msg == "See Photos"
             or msg == "🧑‍🎓 SERBIA CASE"
             or msg == "🤖 DESIGNER CASE"
             or msg == "🤖 SERBIA CASE"

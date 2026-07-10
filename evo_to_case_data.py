@@ -20,6 +20,17 @@ def _first_shade_raw(services: list) -> str:
                 return shade
     return ""
 
+
+def _all_shades_raw(services: list) -> str:
+    """Join all non-empty raw shade strings for substring checks (custom/photos)."""
+    parts = []
+    for s in services or []:
+        for t in s.get("toothlist", []):
+            shade = (t.get("shades") or "").strip()
+            if shade:
+                parts.append(shade)
+    return " ".join(parts)
+
 def _first_tooth(services: list) -> str:
     for s in services or []:
         for t in s.get("toothlist", []):
@@ -80,6 +91,7 @@ def build_case_data_from_evo(clean: Dict[str, Any]) -> Dict[str, Any]:
     # Tooth & Shade (shade locked up front)
     tooth = _first_tooth(services)
     raw_shade = _first_shade_raw(services)
+    shade_raw_all = _all_shades_raw(services)
     shade, _shade_dbg = _pick_single_shade(raw_shade)
 
     # Base route from services (regular / argen_envision / argen_adzir / emax)
@@ -126,6 +138,8 @@ def build_case_data_from_evo(clean: Dict[str, Any]) -> Dict[str, Any]:
 
         # ✅ Shade is finalized here (single, converted, lightest)
         "shade": shade,
+        # Raw EVO shade text(s) for substring checks (custom / photos → designer)
+        "shade_raw": shade_raw_all,
 
         "arch": arch,
         "scanner": "",

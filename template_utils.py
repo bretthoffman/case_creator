@@ -9,6 +9,46 @@ from domain.rules.doctor_rules import (
 from domain.rules import template_rules
 
 
+# ---- shade → designer delivery toggles (checked against raw EVO shade text) ----
+FLAG_CUSTOM_SHADE_TO_DESIGNER = True
+FLAG_PHOTOS_SHADE_TO_DESIGNER = True
+
+
+def shade_field_contains_custom(shade_text: str) -> bool:
+    """Case-insensitive substring match for 'custom' anywhere in the shade field."""
+    return "custom" in (shade_text or "").lower()
+
+
+def shade_field_contains_photos(shade_text: str) -> bool:
+    """Case-insensitive substring match for 'photos' anywhere in the shade field."""
+    return "photos" in (shade_text or "").lower()
+
+
+def apply_shade_designer_flags(case_data) -> None:
+    """Set shade_custom / shade_photos on case_data from the raw EVO shade field(s)."""
+    shade_raw = (case_data or {}).get("shade_raw") or ""
+    cd = case_data or {}
+    cd["shade_custom"] = FLAG_CUSTOM_SHADE_TO_DESIGNER and shade_field_contains_custom(shade_raw)
+    cd["shade_photos"] = FLAG_PHOTOS_SHADE_TO_DESIGNER and shade_field_contains_photos(shade_raw)
+
+
+def shade_routes_to_designer(case_data) -> bool:
+    """True when a enabled shade substring flag matched the raw EVO shade field."""
+    cd = case_data or {}
+    return bool(cd.get("shade_custom")) or bool(cd.get("shade_photos"))
+
+
+def shade_designer_reason_lines(case_data) -> list[str]:
+    """UI summary lines explaining shade-driven designer routing."""
+    cd = case_data or {}
+    lines = []
+    if cd.get("shade_custom"):
+        lines.append("Custom Shade")
+    if cd.get("shade_photos"):
+        lines.append("See Photos")
+    return lines
+
+
 def is_non_argen_shade(shade: str) -> bool:
     return template_rules.is_non_argen_shade(shade)
 

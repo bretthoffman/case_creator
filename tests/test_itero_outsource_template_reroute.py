@@ -190,25 +190,25 @@ class TestIteroOutsourceTemplateReroute(unittest.TestCase):
         )
         self.assertEqual(folder, "reg_emax_ant")
 
-    def test_outsource_itero_posterior_adzir_uses_model_template(self) -> None:
+    def test_outsource_itero_posterior_adzir_uses_itero_outsource_template(self) -> None:
         folder = self._select_folder(
             _base_itero_case(
                 material="adz multilayer",
                 material_hint={"route": "argen_adzir", "material": "adz"},
             )
         )
-        self.assertEqual(folder, "ai_adzir_model")
+        self.assertEqual(folder, "itero_outsource_adzir")
 
-    def test_outsource_itero_posterior_envision_uses_model_template(self) -> None:
+    def test_outsource_itero_posterior_envision_uses_itero_outsource_template(self) -> None:
         folder = self._select_folder(
             _base_itero_case(
                 material="envision multilayer",
                 material_hint={"route": "argen_envision", "material": "envision"},
             )
         )
-        self.assertEqual(folder, "ai_envision_model")
+        self.assertEqual(folder, "itero_outsource_envision")
 
-    def test_outsource_itero_posterior_matches_trios_envision(self) -> None:
+    def test_outsource_itero_posterior_envision_differs_from_trios(self) -> None:
         from domain.decisions.template_selector import select_template_path
 
         case = _base_itero_case(
@@ -219,8 +219,8 @@ class TestIteroOutsourceTemplateReroute(unittest.TestCase):
         with patch("builtins.print"):
             itero_folder = _folder_from_path(select_template_path(case))
             trios_folder = _folder_from_path(select_template_path(trios_case))
-        self.assertEqual(itero_folder, trios_folder)
-        self.assertEqual(itero_folder, "ai_envision_model")
+        self.assertEqual(itero_folder, "itero_outsource_envision")
+        self.assertEqual(trios_folder, "ai_envision_model")
 
     def test_designer_itero_posterior_keeps_ai_envision(self) -> None:
         folder = self._select_folder(
